@@ -1,0 +1,24 @@
+Escala de evaluación del 0 al 5 en función del grado de adecuación entre el objeto de la licitación y las capacidades y servicios de la agencia:
+
+0 — Revisión manual necesaria
+La información disponible es ambigua, incompleta o presenta elementos atípicos que impiden una valoración fiable. Requiere análisis individual antes de asignar un nivel de adecuación.
+
+1 — No
+El objeto de la licitación no se ajusta a las capacidades, experiencia ni servicios de la agencia. No existe coherencia operativa o estratégica que justifique su consideración.
+
+2 — Casi seguro que no
+La adecuación es muy baja. Aunque podría existir algún punto de conexión marginal, el encaje general con las capacidades y líneas de servicio de la agencia es débil.
+
+3 — Quizá no (revisable)
+La adecuación es dudosa. Existen elementos que podrían justificar una revisión adicional, pero con la información disponible no se aprecia una alineación clara.
+
+4 — Casi seguro que sí
+La licitación presenta una alta coherencia con los servicios y experiencia de la agencia. Salvo que aparezcan condicionantes relevantes en el análisis detallado, resulta adecuada.
+
+5 — Sí
+El objeto del contrato se ajusta plenamente a las competencias, capacidades y propuesta de valor de la agencia. La coherencia es clara y directa.
+
+
+-----
+
+Cada vez que se actualice el CSV con resultados hay que ejecutar el script de entrenamiento: python csv_trainer.py historico_licitaciones.csv

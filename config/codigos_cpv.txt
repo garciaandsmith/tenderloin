@@ -1,0 +1,20 @@
+79416000 – Servicios de relaciones públicas 
+79416200 – Consultoría en relaciones públicas 
+79340000 – Servicios de publicidad y marketing
+79411000 – Consultoría en gestión
+79311400 – Servicios de evaluación de campañas publicitarias
+79311200 – Sondeos de opinión pública (para reputación, clima, percepción)
+79340000 – Servicios de publicidad y marketing 
+72400000 – Servicios de Internet
+72500000 – Servicios informáticos
+72322000 – Servicios de gestión de datos
+72212224 – Servicios de desarrollo de software para páginas web 
+79822500 – Servicios de diseño gráfico
+92111200 – Producción de vídeos publicitarios
+92100000 – Servicios de cine y vídeo
+79930000 – Servicios de diseño especializado 
+79800000 – Servicios de impresión (cuando incluyen creatividad + producción)
+79952000 – Servicios de eventos
+79950000 – Organización de exposiciones y congresos
+79953000 – Organización de festivales
+79954000 – Organización de fiestas

@@ -1,21 +1,19 @@
-# Sistema de Inteligencia para Licitaciones Públicas (PLACSP)
+# LicitaciónInteligente - Herramienta de Scouting para Agencia de Comunicación
 
-Este proyecto automatiza la extracción, filtrado y análisis de licitaciones de la Plataforma de Contratación del Sector Público.
+Este proyecto permite a una agencia de comunicación monitorizar de forma estratégica la Plataforma de Contratación del Sector Público (PLACSP). El objetivo es pasar de una búsqueda manual ineficiente a un sistema de triaje inteligente que detecte oportunidades de alto valor.
 
-## 📂 Estructura del Proyecto
-* **/data**: Contiene `historico_licitaciones.csv`. Es la base de conocimiento con ~800 registros puntuados (columna `Objeto` y `Score`) para guiar la evaluación inteligente.
-* **/config**: 
-    * `CodigosCPV.txt`: Códigos de actividad de interés.
-    * `credenciales_agencia.txt`: Capacidades y perfil de la agencia.
-    * `scoring.txt`: Criterios detallados del sistema de puntuación (0-5).
+## 🎯 Objetivo de Negocio
+Identificar concursos públicos donde la agencia tenga altas probabilidades de ganar basándose en su experiencia previa, filtrando por volumen de contrato, región y afinidad temática (CPVs).
 
-## ⚙️ Flujo de Trabajo (Pipeline)
-1. **Extracción**: Conexión a la PLACSP y captura de nuevas licitaciones.
-2. **Filtrado Inicial**: 
-   - Por fecha (recientes).
-   - Por CPV (según lista en `/config`).
-   - Por Región (Inicial: Comunidad de Madrid).
-   - Por Presupuesto (Inicial: > 40.000€).
-3. **Evaluación de Objeto**: Clasificación de adecuación (0-5) basada en el histórico de `/data`.
-4. **Análisis Profundo**: Para puntuaciones 4 y 5, el sistema accede a la URL de la licitación, procesa documentos adjuntos y genera un resumen estructurado.
-5. **Notificación**: Envío de resúmenes por email.
+## 📂 Estructura de Conocimiento
+* **/data/historico_licitaciones.csv**: Base de datos de ~800 experiencias previas evaluadas manualmente (Columna 'Objeto' y 'Score' 0-5). Es la fuente de "aprendizaje" para el sistema.
+* **/config/CodigosCPV.txt**: Diccionario de códigos CPV que la agencia puede ejecutar.
+* **/config/credenciales_agencia.txt**: Perfil narrativo de la agencia (qué hacemos, en qué somos buenos).
+* **/config/scoring.txt**: Definición técnica de qué significa cada nivel de puntuación (0 a 5).
+
+## 🛠️ Roadmap Técnico
+1. **Fase de Captura**: Scraping/RSS de la PLACSP.
+2. **Fase de Triaje**: Filtros duros (Presupuesto > 40k, Madrid, CPVs).
+3. **Fase de IA**: Clasificación de afinidad mediante Procesamiento de Lenguaje Natural (NLP).
+4. **Fase de Auditoría**: Análisis profundo de pliegos y generación de resúmenes ejecutivos.
+5. **Fase de Interfaz**: (Actual) CLI/Scripts locales -> (Futuro) Interfaz Web/SaaS.

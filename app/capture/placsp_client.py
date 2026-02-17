@@ -6,7 +6,7 @@ from email.utils import parsedate_to_datetime
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Iterable, List, Optional
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -68,6 +68,16 @@ class PlacspClient:
                 link = link_node.attrib.get("href", "")
 
             published_at = _parse_datetime(published_raw) or datetime.now(timezone.utc)
+            deadline_at = _parse_datetime(
+                _find_first_text_by_localname(entry, ["DeadlineDate", "EndDate", "PresentationPeriod"])
+            )
+            buyer_name = _find_first_text_by_localname(entry, ["PartyName", "BuyerProfile", "ContractingParty"]) or ""
+            region = _find_first_text_by_localname(entry, ["NUTSCode", "Region", "PlaceExecution"]) or ""
+            cpv = _find_first_text_by_localname(entry, ["ItemClassificationCode", "CPV", "CPVCode"]) or ""
+            budget_amount = _parse_float(
+                _find_first_text_by_localname(entry, ["TotalAmount", "BudgetAmount", "EstimatedOverallContractAmount"])
+            )
+
             tenders.append(
                 TenderRaw(
                     external_id=external_id or link or title,
@@ -75,11 +85,11 @@ class PlacspClient:
                     summary=summary,
                     link=link,
                     published_at=published_at,
-                    deadline_at=None,
-                    buyer_name="",
-                    region="",
-                    cpv="",
-                    budget_amount=None,
+                    deadline_at=deadline_at,
+                    buyer_name=buyer_name,
+                    region=region,
+                    cpv=cpv,
+                    budget_amount=budget_amount,
                     source=self.config.source_name,
                 )
             )
@@ -115,6 +125,22 @@ def _text(node: Optional[ET.Element]) -> str:
     if node is None or node.text is None:
         return ""
     return node.text.strip()
+
+
+def _localname(tag: str) -> str:
+    if "}" in tag:
+        return tag.rsplit("}", 1)[1]
+    return tag
+
+
+def _find_first_text_by_localname(node: ET.Element, local_names: Iterable[str]) -> str:
+    wanted = {name.lower() for name in local_names}
+    for element in node.iter():
+        if _localname(element.tag).lower() in wanted:
+            value = _text(element)
+            if value:
+                return value
+    return ""
 
 
 def _parse_datetime(value: str) -> Optional[datetime]:

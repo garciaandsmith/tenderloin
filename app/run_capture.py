@@ -24,6 +24,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--timeout", type=int, default=30, help="HTTP timeout in seconds")
     parser.add_argument("--log-level", default="INFO", help="Log level")
+    parser.add_argument(
+        "--overlap-minutes",
+        type=int,
+        default=120,
+        help="Lookback overlap (minutes) to avoid missing delayed publications",
+    )
     return parser.parse_args()
 
 
@@ -39,13 +45,19 @@ def main() -> None:
     repository = RawTenderRepository(db_path=db_path)
     state_store = StateStore(db_path=db_path)
 
-    result = CaptureService(client=client, repository=repository, state_store=state_store).run()
+    result = CaptureService(
+        client=client,
+        repository=repository,
+        state_store=state_store,
+        overlap_minutes=args.overlap_minutes,
+    ).run()
     print(
         "capture_result",
         {
             "fetched": result.fetched,
             "inserted": result.inserted,
             "previous_last_run_at": result.last_run_at.isoformat() if result.last_run_at else None,
+            "effective_since": result.effective_since.isoformat() if result.effective_since else None,
             "new_last_run_at": result.new_last_run_at.isoformat(),
         },
     )

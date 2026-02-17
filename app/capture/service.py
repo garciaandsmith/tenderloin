@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 from typing import Optional
 
@@ -18,6 +18,7 @@ class CaptureRunResult:
     inserted: int
     last_run_at: Optional[datetime]
     new_last_run_at: datetime
+    effective_since: Optional[datetime]
 
 
 class CaptureService:
@@ -26,21 +27,28 @@ class CaptureService:
         client: PlacspClient,
         repository: RawTenderRepository,
         state_store: StateStore,
+        overlap_minutes: int = 120,
     ) -> None:
         self.client = client
         self.repository = repository
         self.state_store = state_store
+        self.overlap_minutes = overlap_minutes
 
     def run(self) -> CaptureRunResult:
         previous_run = self.state_store.get_last_run_at()
-        logger.info("Starting capture. last_run_at=%s", previous_run)
+        effective_since = self._effective_since(previous_run)
+        logger.info(
+            "Starting capture. last_run_at=%s effective_since=%s overlap_minutes=%s",
+            previous_run,
+            effective_since,
+            self.overlap_minutes,
+        )
 
-        tenders = self.client.fetch_since(previous_run)
+        tenders = self.client.fetch_since(effective_since)
         captured_at = datetime.now(timezone.utc)
         inserted = self.repository.upsert_many(tenders, captured_at)
 
-        max_published = max((item.published_at for item in tenders), default=captured_at)
-        new_last_run = max(max_published, captured_at)
+        new_last_run = captured_at
         self.state_store.set_last_run_at(new_last_run)
 
         logger.info(
@@ -55,4 +63,11 @@ class CaptureService:
             inserted=inserted,
             last_run_at=previous_run,
             new_last_run_at=new_last_run,
+            effective_since=effective_since,
         )
+
+    def _effective_since(self, previous_run: Optional[datetime]) -> Optional[datetime]:
+        if previous_run is None:
+            return None
+        overlap = timedelta(minutes=max(self.overlap_minutes, 0))
+        return previous_run - overlap

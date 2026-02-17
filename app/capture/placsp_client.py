@@ -5,11 +5,12 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Iterable, List, Optional
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
 from app.capture.models import TenderRaw
@@ -23,6 +24,8 @@ class PlacspClientConfig:
     source_url: str
     timeout_seconds: int = 30
     source_name: str = "placsp"
+    retry_attempts: int = 3
+    retry_backoff_seconds: float = 1.0
 
 
 class PlacspClient:
@@ -46,14 +49,43 @@ class PlacspClient:
         if url.startswith("file://"):
             return Path(url.removeprefix("file://")).read_text(encoding="utf-8")
 
-        try:
-            with urlopen(url, timeout=self.config.timeout_seconds) as response:  # noqa: S310
-                return response.read().decode("utf-8", errors="replace")
-        except URLError as exc:
-            logger.error("Failed to download PLACSP payload: %s", exc)
-            raise
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+        }
+
+        attempts = max(self.config.retry_attempts, 1)
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                request = Request(url, headers=headers)
+                with urlopen(request, timeout=self.config.timeout_seconds) as response:  # noqa: S310
+                    return response.read().decode("utf-8", errors="replace")
+            except (HTTPError, URLError, TimeoutError) as exc:
+                last_error = exc
+                logger.warning(
+                    "Download attempt %s/%s failed for %s: %s",
+                    attempt,
+                    attempts,
+                    url,
+                    exc,
+                )
+                if attempt < attempts:
+                    sleep_seconds = self.config.retry_backoff_seconds * attempt
+                    time.sleep(sleep_seconds)
+
+        logger.error("Failed to download PLACSP payload after %s attempts", attempts)
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Unknown download error without exception")
 
     def _parse_atom(self, xml_text: str) -> List[TenderRaw]:
+        print(xml_text[:500])
         root = ET.fromstring(xml_text)
         tenders: List[TenderRaw] = []
 

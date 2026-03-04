@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import logging
 
@@ -15,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--db-path",
         default="data/runtime/tenderloin.db",
-        help="SQLite database path",
+        help="SQLite database path (used when SUPABASE_URL env var is not set)",
     )
     parser.add_argument(
         "--source-url",
@@ -33,6 +34,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _build_repository_and_state(args: argparse.Namespace):
+    """Return (repository, state_store) selecting backend from environment."""
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+    if supabase_url and supabase_key:
+        logging.getLogger(__name__).info("Using Supabase backend")
+        from app.capture.storage_supabase import SupabaseRawTenderRepository
+        from app.capture.state_store_supabase import SupabaseStateStore
+
+        return (
+            SupabaseRawTenderRepository(supabase_url, supabase_key),
+            SupabaseStateStore(supabase_url, supabase_key),
+        )
+
+    logging.getLogger(__name__).info("Using SQLite backend at %s", args.db_path)
+    db_path = Path(args.db_path)
+    return RawTenderRepository(db_path=db_path), StateStore(db_path=db_path)
+
+
 def main() -> None:
     args = parse_args()
     logging.basicConfig(
@@ -40,10 +61,8 @@ def main() -> None:
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     )
 
-    db_path = Path(args.db_path)
     client = PlacspClient(PlacspClientConfig(source_url=args.source_url, timeout_seconds=args.timeout))
-    repository = RawTenderRepository(db_path=db_path)
-    state_store = StateStore(db_path=db_path)
+    repository, state_store = _build_repository_and_state(args)
 
     result = CaptureService(
         client=client,
@@ -51,6 +70,7 @@ def main() -> None:
         state_store=state_store,
         overlap_minutes=args.overlap_minutes,
     ).run()
+
     print(
         "capture_result",
         {

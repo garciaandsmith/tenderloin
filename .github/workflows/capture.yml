@@ -1,0 +1,42 @@
+name: Daily PLACSP Capture
+
+on:
+  schedule:
+    # Runs daily at 07:00 UTC (09:00 CET / 08:00 GMT)
+    - cron: '0 7 * * *'
+  # Allow manual trigger from the GitHub Actions UI
+  workflow_dispatch:
+
+jobs:
+  capture:
+    name: Capture tenders from PLACSP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install supabase
+          # Install project dependencies if requirements.txt exists
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run capture
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python app/run_capture.py
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Capture job failed at $(date -u). Check the Actions log."
+          # Add Slack/email notification here if needed in the future.

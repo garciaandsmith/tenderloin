@@ -1,0 +1,11 @@
+# Core (already used in Phase 1)
+# (stdlib only: sqlite3, urllib, xml, dataclasses, logging)
+
+# Phase 1+: Supabase backend support
+supabase>=2.10.0
+
+# Phase 3: ML scoring pipeline (install when implementing Phase 4)
+# sentence-transformers>=3.0.0
+# scikit-learn>=1.5.0
+# numpy>=2.0.0
+# pandas>=2.2.0

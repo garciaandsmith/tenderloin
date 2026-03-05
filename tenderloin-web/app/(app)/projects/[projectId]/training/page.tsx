@@ -1,0 +1,78 @@
+import { createClient } from "@/lib/supabase/server";
+import {
+  getNextTrainingTender,
+  getScoreDistribution,
+  getScoredCount,
+} from "@/lib/queries/tenders";
+import TrainingCard from "@/components/training/TrainingCard";
+import TrainingCounter from "@/components/training/TrainingCounter";
+import ScoreDistributionChart from "@/components/training/ScoreDistributionChart";
+import TryMeMode from "@/components/training/TryMeMode";
+
+export const metadata = { title: "Entrenamiento — Tenderloin" };
+export const dynamic = "force-dynamic";
+
+interface Props {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ mode?: string }>;
+}
+
+export default async function TrainingPage({ params, searchParams }: Props) {
+  const { projectId } = await params;
+  const { mode } = await searchParams;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const [nextTender, distribution, scoredCount] = await Promise.all([
+    getNextTrainingTender(projectId, user!.id),
+    getScoreDistribution(projectId),
+    getScoredCount(projectId),
+  ]);
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-bold">Entrenamiento del modelo</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Puntúa licitaciones de 0 a 5 para entrenar el modelo de puntuación inteligente.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <a
+            href={`/projects/${projectId}/training`}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              mode !== "tryme"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            Entrenar
+          </a>
+          <a
+            href={`/projects/${projectId}/training?mode=tryme`}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              mode === "tryme"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            🎯 TRY ME
+          </a>
+        </div>
+      </div>
+
+      <TrainingCounter count={scoredCount} />
+      <ScoreDistributionChart data={distribution} />
+
+      {mode === "tryme" ? (
+        <TryMeMode tender={nextTender} projectId={projectId} />
+      ) : (
+        <TrainingCard tender={nextTender} projectId={projectId} />
+      )}
+    </div>
+  );
+}

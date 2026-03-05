@@ -1,0 +1,75 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import ScoreButtons from "./ScoreButtons";
+import { formatBudget } from "@/lib/utils/formatters";
+import type { TrainingTender } from "@/lib/types/app.types";
+
+interface Props {
+  tender: TrainingTender | null;
+  projectId: string;
+}
+
+export default function TrainingCard({ tender, projectId }: Props) {
+  const router = useRouter();
+  const [scoring, setScoring] = useState(false);
+  const [selected, setSelected] = useState<number | null>(null);
+
+  if (!tender) {
+    return (
+      <div className="rounded-lg border bg-card p-8 text-center">
+        <p className="text-2xl mb-3">🎉</p>
+        <p className="font-semibold">¡Has puntuado todas las licitaciones disponibles!</p>
+        <p className="text-sm text-muted-foreground mt-2">
+          Vuelve más tarde cuando haya nuevas licitaciones capturadas.
+        </p>
+      </div>
+    );
+  }
+
+  async function handleScore(score: number) {
+    setSelected(score);
+    setScoring(true);
+
+    await fetch(`/api/tenders/${tender!.id}/score`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId, score }),
+    });
+
+    // Brief pause so the selection is visible, then load the next tender
+    await new Promise((r) => setTimeout(r, 400));
+    setScoring(false);
+    setSelected(null);
+    router.refresh();
+  }
+
+  return (
+    <div className="rounded-lg border bg-card overflow-hidden">
+      {/* Tender content */}
+      <div className="p-6 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <h2 className="font-semibold leading-snug">{tender.title}</h2>
+            <p className="text-sm text-muted-foreground mt-1">{tender.buyer_name}</p>
+          </div>
+          {tender.budget_amount && (
+            <span className="shrink-0 text-sm font-medium text-muted-foreground">
+              {formatBudget(tender.budget_amount)}
+            </span>
+          )}
+        </div>
+
+        <p className="text-sm leading-relaxed text-muted-foreground line-clamp-6">
+          {tender.summary}
+        </p>
+      </div>
+
+      {/* Scoring */}
+      <div className="border-t bg-muted/30 px-6 py-4">
+        <ScoreButtons onScore={handleScore} disabled={scoring} selected={selected} />
+      </div>
+    </div>
+  );
+}

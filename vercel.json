@@ -1,6 +1,0 @@
-{
-  "framework": "nextjs",
-  "buildCommand": "cd tenderloin-web && npm install && npm run build",
-  "outputDirectory": "tenderloin-web/.next",
-  "installCommand": "echo 'Monorepo: install is per-project'"
-}

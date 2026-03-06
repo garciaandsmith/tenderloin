@@ -7,10 +7,10 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.capture.placsp_client import PlacspClient, PlacspClientConfig
-from app.capture.service import CaptureService
-from app.capture.state_store import StateStore
-from app.capture.storage import RawTenderRepository
+from pipeline.capture.placsp_client import PlacspClient, PlacspClientConfig
+from pipeline.capture.service import CaptureService
+from pipeline.capture.state_store import StateStore
+from pipeline.capture.storage import RawTenderRepository
 
 
 class CapturePhase1HardeningTests(unittest.TestCase):

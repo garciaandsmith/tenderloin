@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
-from app.capture.models import TenderRaw
+from pipeline.capture.models import TenderRaw
 
 ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
 logger = logging.getLogger(__name__)

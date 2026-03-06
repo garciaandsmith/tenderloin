@@ -20,7 +20,7 @@ export default async function ProjectSettingsPage({ params }: Props) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("*")
     .eq("id", user!.id)
     .single();
 

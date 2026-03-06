@@ -5,8 +5,7 @@
  * regenerate this file with:
  *   npx supabase gen types typescript --project-id YOUR_PROJECT_ID > lib/types/database.types.ts
  *
- * The types below are hand-written stubs that match the schema defined in
- * supabase/schema.sql. Replace with generated types once the project is set up.
+ * The types below are hand-written stubs. Replace with generated types once the project is live.
  */
 
 export type Json =
@@ -44,6 +43,7 @@ export interface Database {
           full_name?: string | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
       projects: {
         Row: {
@@ -70,6 +70,7 @@ export interface Database {
           is_active?: boolean;
           updated_at?: string;
         };
+        Relationships: [];
       };
       project_members: {
         Row: {
@@ -85,6 +86,7 @@ export interface Database {
         Update: {
           assigned_at?: string;
         };
+        Relationships: [];
       };
       project_filters: {
         Row: {
@@ -121,7 +123,22 @@ export interface Database {
           max_contract_months?: number | null;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["project_filters"]["Insert"]>;
+        Update: {
+          budget_min?: number | null;
+          budget_max?: number | null;
+          regions?: string[] | null;
+          cpv_codes?: string[] | null;
+          contract_types?: string[] | null;
+          procedure_types?: string[] | null;
+          keywords_include?: string[] | null;
+          keywords_exclude?: string[] | null;
+          buyer_types?: string[] | null;
+          max_lot_count?: number | null;
+          min_contract_months?: number | null;
+          max_contract_months?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       tenders_raw: {
         Row: {
@@ -164,7 +181,25 @@ export interface Database {
           duration_months?: number | null;
           buyer_type?: string | null;
         };
-        Update: Partial<Database["public"]["Tables"]["tenders_raw"]["Insert"]>;
+        Update: {
+          external_id?: string;
+          title?: string;
+          summary?: string;
+          link?: string;
+          published_at?: string;
+          deadline_at?: string | null;
+          buyer_name?: string;
+          region?: string;
+          cpv?: string;
+          budget_amount?: number | null;
+          source?: string;
+          contract_type?: string | null;
+          procedure_type?: string | null;
+          lot_count?: number | null;
+          duration_months?: number | null;
+          buyer_type?: string | null;
+        };
+        Relationships: [];
       };
       pipeline_state: {
         Row: {
@@ -181,6 +216,7 @@ export interface Database {
           value?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       tender_scores: {
         Row: {
@@ -202,6 +238,7 @@ export interface Database {
         Update: {
           score?: number;
         };
+        Relationships: [];
       };
       tender_model_scores: {
         Row: {
@@ -223,6 +260,7 @@ export interface Database {
         Update: {
           model_score?: number;
         };
+        Relationships: [];
       };
       tender_filter_results: {
         Row: {
@@ -245,6 +283,7 @@ export interface Database {
           passed?: boolean;
           discard_reasons?: string[] | null;
         };
+        Relationships: [];
       };
       tender_analysis: {
         Row: {
@@ -277,7 +316,17 @@ export interface Database {
           triggered_at?: string;
           completed_at?: string | null;
         };
-        Update: Partial<Database["public"]["Tables"]["tender_analysis"]["Insert"]>;
+        Update: {
+          status?: "pending" | "running" | "done" | "error";
+          key_data_summary?: string | null;
+          services_required?: string | null;
+          technical_conditions?: string | null;
+          administrative_conditions?: string | null;
+          attached_files?: Json | null;
+          raw_llm_output?: Json | null;
+          completed_at?: string | null;
+        };
+        Relationships: [];
       };
     };
     Views: Record<string, never>;
@@ -292,5 +341,6 @@ export interface Database {
       };
     };
     Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 }

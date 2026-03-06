@@ -17,7 +17,7 @@ export default async function AppLayout({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, email, full_name, role")
+    .select("*")
     .eq("id", user.id)
     .single();
 

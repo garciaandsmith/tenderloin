@@ -58,7 +58,7 @@ export async function getNextTrainingTender(
   // Subquery-style: get already-scored tender IDs for this user/project
   const { data: scoredRows } = await supabase
     .from("tender_scores")
-    .select("tender_id")
+    .select("*")
     .eq("project_id", projectId)
     .eq("scored_by", userId);
 
@@ -66,7 +66,7 @@ export async function getNextTrainingTender(
 
   let query = supabase
     .from("tenders_raw")
-    .select("id, title, summary, buyer_name, budget_amount, published_at, tender_filter_results!inner ( passed, project_id )")
+    .select("*, tender_filter_results!inner(*)")
     .eq("tender_filter_results.project_id", projectId)
     .eq("tender_filter_results.passed", true)
     .order("published_at", { ascending: false })
@@ -94,7 +94,7 @@ export async function getScoreDistribution(projectId: string): Promise<ScoreDist
 
   const { data, error } = await supabase
     .from("tender_scores")
-    .select("score")
+    .select("*")
     .eq("project_id", projectId);
 
   if (error) throw error;

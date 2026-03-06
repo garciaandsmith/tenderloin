@@ -45,7 +45,7 @@ export async function getProjectMembers(projectId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("project_members")
-    .select("user_id, assigned_at, profiles ( id, email, full_name, role )")
+    .select("*, profiles(*)")
     .eq("project_id", projectId);
 
   if (error) throw error;

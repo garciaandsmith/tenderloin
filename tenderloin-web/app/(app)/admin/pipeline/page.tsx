@@ -14,7 +14,7 @@ export default async function AdminPipelinePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("*")
     .eq("id", user!.id)
     .single();
 
@@ -22,7 +22,7 @@ export default async function AdminPipelinePage() {
 
   const { data: stateRow } = await supabase
     .from("pipeline_state")
-    .select("value, updated_at")
+    .select("*")
     .eq("key", "capture.last_successful_run_at")
     .maybeSingle();
 

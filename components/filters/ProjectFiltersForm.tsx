@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProjectFilters } from "@/lib/types/app.types";
 import { AGENCY_CPV_CODES } from "@/lib/utils/cpv";
-import { SPAIN_NUTS_CODES } from "@/lib/utils/nuts";
+import NutsSelector from "@/components/filters/NutsSelector";
+import CpvSelector from "@/components/filters/CpvSelector";
 
 interface Props {
   projectId: string;
@@ -142,24 +143,12 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
 
       {/* Regions */}
       <Section title="Regiones (códigos NUTS)">
-        <CheckboxGroup
-          items={SPAIN_NUTS_CODES.slice(0, 15)}
-          selected={regions}
-          onToggle={(v) => !readOnly && toggle(regions, setRegions, v)}
-          idKey="code"
-          labelKey="label"
-        />
+        <NutsSelector selected={regions} onChange={setRegions} disabled={readOnly} />
       </Section>
 
       {/* CPV codes */}
       <Section title="Códigos CPV">
-        <CheckboxGroup
-          items={AGENCY_CPV_CODES}
-          selected={cpvCodes}
-          onToggle={(v) => !readOnly && toggle(cpvCodes, setCpvCodes, v)}
-          idKey="code"
-          labelKey="label"
-        />
+        <CpvSelector selected={cpvCodes} onChange={setCpvCodes} disabled={readOnly} />
       </Section>
 
       {/* Contract types */}
@@ -280,44 +269,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
-    </div>
-  );
-}
-
-function CheckboxGroup<T extends Record<string, string>>({
-  items,
-  selected,
-  onToggle,
-  idKey,
-  labelKey,
-}: {
-  items: T[];
-  selected: string[];
-  onToggle: (v: string) => void;
-  idKey: keyof T;
-  labelKey: keyof T;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {items.map((item) => {
-        const value = item[idKey];
-        const label = item[labelKey];
-        const checked = selected.includes(value);
-        return (
-          <button
-            key={value}
-            type="button"
-            onClick={() => onToggle(value)}
-            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${
-              checked
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background border-border text-muted-foreground hover:border-primary"
-            }`}
-          >
-            {label}
-          </button>
-        );
-      })}
     </div>
   );
 }

@@ -1,20 +1,195 @@
-79416000 – Servicios de relaciones públicas 
-79416200 – Consultoría en relaciones públicas 
+# Códigos CPV relevantes para agencia de comunicación y marketing
+# Fuente: Vocabulario Común de Contratos (CPV) — Reglamento (CE) n.º 213/2008
+# Categorías: Marketing & Comunicación | Digital & Tecnología | Diseño & Producción | Eventos | Consultoría | Audiovisual | Fotografía | Formación
+
+## Marketing & Comunicación
+79310000 – Servicios de estudios de mercado
+79311000 – Servicios de encuestas
+79311100 – Servicios de diseño de encuestas
+79311200 – Servicios de realización de encuestas
+79311210 – Servicios de encuesta telefónica
+79311300 – Servicios de investigación de mercado
+79311400 – Servicios de evaluación de publicidad
+79312000 – Servicios de análisis de mercado
+79315000 – Servicios de investigación social
+79320000 – Servicios de sondeo de opinión pública
+79330000 – Servicios estadísticos
 79340000 – Servicios de publicidad y marketing
-79411000 – Consultoría en gestión
-79311400 – Servicios de evaluación de campañas publicitarias
-79311200 – Sondeos de opinión pública (para reputación, clima, percepción)
-79340000 – Servicios de publicidad y marketing 
+79341000 – Servicios de publicidad
+79341100 – Servicios de consultoría publicitaria
+79341200 – Servicios de gestión publicitaria
+79341400 – Servicios de campaña de publicidad televisiva
+79342000 – Servicios de marketing
+79342100 – Servicios de marketing directo
+79342200 – Servicios de promoción
+79342300 – Servicios de atención al cliente
+79342320 – Servicios de atención y cuidado al cliente
+79342400 – Servicios de relaciones con clientes
+79350000 – Servicios de suministro de personal de publicidad y marketing
+79360000 – Servicios de distribución de material publicitario
+79416000 – Servicios de relaciones públicas
+79416100 – Servicios de gestión de relaciones públicas
+79416200 – Consultoría en relaciones públicas
+
+## Consultoría & Gestión
+79400000 – Servicios de consultoría empresarial y de gestión
+79410000 – Servicios de consultoría empresarial y de gestión
+79411000 – Servicios de consultoría en gestión general
+79411100 – Servicios de consultoría en desarrollo empresarial
+79412000 – Servicios de consultoría en gestión financiera
+79413000 – Servicios de consultoría en gestión de marketing
+79414000 – Servicios de consultoría en gestión de recursos humanos
+79415000 – Servicios de consultoría en gestión de producción
+79415200 – Servicios de consultoría en diseño
+79418000 – Servicios de consultoría en adquisiciones
+79419000 – Servicios de consultoría en evaluación
+79420000 – Servicios relacionados con la gestión
+79421000 – Servicios de gestión de proyectos distintos de los de obras de construcción
+79421100 – Supervisión de proyectos distintos de los de obras de construcción
+79421200 – Diseño de proyectos distintos de los de obras de construcción
+79430000 – Servicios de gestión de crisis
+79998000 – Servicios de coaching
+
+## Digital & Tecnología
+72200000 – Servicios de programación y consultoría informática
+72210000 – Servicios de programación de productos de software empaquetado
+72212000 – Servicios de programación de software de aplicación
+72212224 – Servicios de desarrollo de software de páginas web
+72220000 – Servicios de consultoría en sistemas e informática
+72230000 – Servicios de desarrollo de software personalizado
+72240000 – Servicios de análisis y programación de sistemas
+72300000 – Servicios de datos
+72310000 – Servicios de tratamiento de datos
+72312000 – Servicios de introducción de datos
+72313000 – Servicios de captura de datos
+72314000 – Servicios de recopilación y compilación de datos
+72315000 – Servicios de gestión y soporte de redes de datos
+72316000 – Servicios de análisis de datos
+72317000 – Servicios de almacenamiento de datos
+72318000 – Servicios de transmisión de datos
+72319000 – Servicios de suministro de datos
+72320000 – Servicios de bases de datos
+72321000 – Servicios de bases de datos de valor añadido
+72322000 – Servicios de gestión electrónica de datos
 72400000 – Servicios de Internet
+72410000 – Servicios de proveedor
+72411000 – Proveedores de servicios de Internet (ISP)
+72412000 – Proveedores de servicios de correo electrónico
+72413000 – Servicios de diseño de sitios en la World Wide Web
+72414000 – Proveedores de software de motor de búsqueda en la World Wide Web
+72415000 – Servicios de mantenimiento de software para Internet o Intranet
+72416000 – Proveedores de servicios de aplicaciones
+72417000 – Nombres de dominio de Internet
+72420000 – Servicios de desarrollo de Internet
+72421000 – Servicios de desarrollo de aplicaciones cliente para Internet o intranet
+72422000 – Servicios de desarrollo de aplicaciones servidor para Internet o intranet
 72500000 – Servicios informáticos
-72322000 – Servicios de gestión de datos
-72212224 – Servicios de desarrollo de software para páginas web 
+72510000 – Servicios de gestión informática
+72511000 – Servicios de software de gestión de redes
+72512000 – Servicios de gestión de documentos
+72514000 – Servicios de gestión de instalaciones informáticas
+72514100 – Servicios de operación de instalaciones informáticas
+72514200 – Servicios de desarrollo de sistemas informáticos
+72514300 – Servicios de mantenimiento de sistemas informáticos
+72520000 – Servicios de apoyo y consultoría informática
+72521000 – Servicios de soporte técnico informático
+72540000 – Servicios de actualización de ordenadores
+72590000 – Servicios informáticos profesionales
+
+## Diseño & Producción Gráfica
+22100000 – Libros impresos, folletos y hojas sueltas
+22110000 – Libros impresos
+22140000 – Hojas sueltas
+22150000 – Folletos
+22160000 – Cuadernillos
+22200000 – Diarios, revistas profesionales, publicaciones periódicas y revistas
+22314000 – Dibujos
+22460000 – Material publicitario, catálogos de ventas y guías
+22461000 – Catálogos
+22462000 – Material publicitario
+22463000 – Folletos de promoción de ventas
+22470000 – Manuales
+22900000 – Impresos varios
+79800000 – Servicios de impresión y servicios conexos
+79810000 – Servicios de impresión
+79811000 – Servicios de impresión digital
+79812000 – Servicios de composición tipográfica
+79820000 – Servicios relacionados con la impresión
+79821000 – Servicios de acabado de impresión
+79821100 – Servicios de corrección de pruebas
+79822000 – Servicios de composición
+79822100 – Servicios de composición tipográfica
+79822200 – Servicios de grabado
+79822300 – Servicios de serigrafía
+79822400 – Servicios de litografía
 79822500 – Servicios de diseño gráfico
-92111200 – Producción de vídeos publicitarios
+79823000 – Servicios de impresión y entrega
+79824000 – Servicios de impresión y distribución
+79930000 – Servicios especializados de diseño
+79931000 – Servicios de decoración de interiores
+79932000 – Servicios de diseño de interiores
+79933000 – Servicios de apoyo al diseño
+
+## Fotografía
+79960000 – Fotografía y servicios conexos
+79961000 – Servicios de fotografía
+79961100 – Servicios de fotografía publicitaria
+79961200 – Servicios de fotografía aérea
+79961300 – Servicios de microfilm
+79962000 – Servicios de revelado fotográfico
+79963000 – Servicios de restauración, copiado y retoque fotográfico
+
+## Audiovisual & Producción de Contenido
 92100000 – Servicios de cine y vídeo
-79930000 – Servicios de diseño especializado 
-79800000 – Servicios de impresión (cuando incluyen creatividad + producción)
+92110000 – Producción de películas y servicios conexos
+92111000 – Servicios de producción de películas publicitarias o de promoción y vídeo
+92111100 – Servicios de producción de cine para películas o vídeos de promoción
+92111200 – Servicios de producción de vídeo para películas o vídeos de publicidad
+92111210 – Servicios de producción de vídeo para películas promocionales
+92111220 – Servicios de producción de vídeo para películas publicitarias
+92111300 – Servicios de reproducción de películas publicitarias o de promoción
+92112000 – Servicios de distribución de películas publicitarias o de promoción
+92120000 – Servicios de distribución de películas y servicios conexos
+92130000 – Servicios de proyección cinematográfica
+92140000 – Servicios de locutores
+92200000 – Servicios de radio y televisión
+92210000 – Servicios de radio
+92211000 – Servicios de producción de programas de radio
+92220000 – Servicios de televisión
+92221000 – Servicios de producción de programas de televisión
+92230000 – Servicios de radio y televisión por cable
+92312000 – Servicios de artes escénicas
+92312100 – Servicios de compañías de teatro
+92312200 – Servicios de orquestas, bandas y grupos musicales
+92313000 – Servicios de producciones artísticas
+92314000 – Servicios de artistas individuales
+92315000 – Servicios de artistas de variedades
+92316000 – Servicios de espectáculos de luz y sonido
+
+## Eventos & Comunicación Institucional
+79950000 – Servicios de organización de exposiciones, ferias y congresos
+79951000 – Servicios de organización de seminarios
 79952000 – Servicios de eventos
-79950000 – Organización de exposiciones y congresos
-79953000 – Organización de festivales
-79954000 – Organización de fiestas
+79952100 – Servicios de organización de eventos culturales
+79953000 – Servicios de organización de festivales
+79954000 – Servicios de organización de fiestas
+79955000 – Servicios de organización de desfiles de moda
+79956000 – Servicios de organización de ferias y exposiciones
+79957000 – Servicios de organización de subastas
+
+## Formación & Comunicación Interna
+80000000 – Servicios de educación y formación
+80400000 – Servicios de educación de adultos y otros servicios de educación
+80410000 – Servicios de escuelas de formación variada
+80500000 – Servicios de formación
+80510000 – Servicios de formación especializada
+80511000 – Servicios de formación de personal
+80521000 – Servicios de programas de formación
+80522000 – Seminarios de formación
+80530000 – Servicios de formación profesional
+80550000 – Servicios de formación en seguridad
+
+## Relaciones con Medios & Comunicación
+92400000 – Servicios de agencias de noticias
+92500000 – Servicios de biblioteca, archivo, museo y otros servicios culturales
+92510000 – Servicios de biblioteca y archivo

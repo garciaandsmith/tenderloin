@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { formatDate } from "@/lib/utils/formatters";
+import UserRoleToggle from "@/components/admin/UserRoleToggle";
 
 export const metadata = { title: "Usuarios — Admin — Tenderloin" };
 
@@ -37,6 +38,7 @@ export default async function AdminUsersPage() {
               <th className="px-4 py-3 text-left font-medium">Nombre</th>
               <th className="px-4 py-3 text-left font-medium">Rol</th>
               <th className="px-4 py-3 text-left font-medium">Registrado</th>
+              <th className="px-4 py-3 text-left font-medium">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -58,6 +60,9 @@ export default async function AdminUsersPage() {
                 <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                   {formatDate(u.created_at)}
                 </td>
+                <td className="px-4 py-3">
+                  <UserRoleToggle userId={u.id} currentRole={u.role} isSelf={u.id === user!.id} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -65,7 +70,7 @@ export default async function AdminUsersPage() {
       </div>
 
       <p className="text-xs text-muted-foreground mt-4">
-        Para invitar nuevos usuarios o cambiar roles, accede al panel de Supabase → Authentication.
+        Para invitar nuevos usuarios, accede al panel de Supabase → Authentication.
       </p>
     </div>
   );

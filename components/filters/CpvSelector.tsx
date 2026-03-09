@@ -156,7 +156,7 @@ function CpvPickerModal({
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="w-full max-w-lg flex flex-col" style={{ maxHeight: "85vh" }}>
+      <DialogContent className="w-full max-w-2xl flex flex-col" style={{ maxHeight: "85vh" }}>
         <DialogHeader>
           <DialogTitle>Códigos CPV</DialogTitle>
           <DialogDescription>
@@ -191,7 +191,7 @@ function CpvPickerModal({
         </div>
 
         {/* Scrollable list */}
-        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 space-y-4">
           {groupedSuggested.length > 0 ? (
             groupedSuggested.map(({ category, items }) => (
               <div key={category}>

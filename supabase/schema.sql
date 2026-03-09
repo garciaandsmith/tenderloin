@@ -15,12 +15,19 @@ create table public.profiles (
   updated_at  timestamptz not null default now()
 );
 
--- Auto-create profile row on signup
+-- Auto-create profile row on signup.
+-- The very first user to register becomes 'admin'; everyone else defaults to 'user'.
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_role text;
 begin
-  insert into public.profiles (id, email)
-  values (new.id, new.email);
+  select case when count(*) = 0 then 'admin' else 'user' end
+    into v_role
+    from public.profiles;
+
+  insert into public.profiles (id, email, role)
+  values (new.id, new.email, v_role);
   return new;
 end;
 $$;

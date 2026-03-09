@@ -1,8 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { AGENCY_CPV_CODES } from "@/lib/utils/cpv";
 
 const CATEGORIES = [...new Set(AGENCY_CPV_CODES.map((c) => c.category))];
@@ -14,24 +23,89 @@ interface Props {
 }
 
 export default function CpvSelector({ selected, onChange, disabled = false }: Props) {
+  function labelFor(code: string): string {
+    return AGENCY_CPV_CODES.find((c) => c.code === code)?.label ?? "Código personalizado";
+  }
+
+  function remove(code: string) {
+    onChange(selected.filter((c) => c !== code));
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Selected tags */}
+      <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+        {selected.length === 0 ? (
+          <span className="text-xs text-muted-foreground self-center">
+            Ningún código seleccionado
+          </span>
+        ) : (
+          selected.map((code) => (
+            <span
+              key={code}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 text-primary border border-primary/20 px-2 py-1 text-xs"
+            >
+              <span className="font-mono font-semibold">{code}</span>
+              <span className="text-primary/70">{labelFor(code)}</span>
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={() => remove(code)}
+                  className="hover:text-destructive transition-colors ml-0.5 leading-none"
+                  aria-label={`Quitar ${code}`}
+                >
+                  ×
+                </button>
+              )}
+            </span>
+          ))
+        )}
+      </div>
+
+      {/* Action row */}
+      {!disabled && (
+        <div className="flex gap-2 items-center">
+          <CpvPickerModal selected={selected} onChange={onChange} />
+          {selected.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+            >
+              Quitar todos
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Modal picker ──────────────────────────────────────────────────────────────
+
+function CpvPickerModal({
+  selected,
+  onChange,
+}: {
+  selected: string[];
+  onChange: (v: string[]) => void;
+}) {
   const [search, setSearch] = useState("");
   const [customInput, setCustomInput] = useState("");
   const [customError, setCustomError] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const query = search.trim().toLowerCase();
 
-  // Codes from the suggested list that aren't selected yet
   const filteredSuggested = useMemo(() => {
-    return AGENCY_CPV_CODES.filter((c) => {
-      const matchesQuery =
-        !query ||
+    if (!query) return AGENCY_CPV_CODES;
+    return AGENCY_CPV_CODES.filter(
+      (c) =>
         c.code.includes(query) ||
         c.label.toLowerCase().includes(query) ||
-        c.category.toLowerCase().includes(query);
-      const notSelected = !selected.includes(c.code);
-      return matchesQuery && notSelected;
-    });
-  }, [query, selected]);
+        c.category.toLowerCase().includes(query)
+    );
+  }, [query]);
 
   const groupedSuggested = useMemo(() => {
     return CATEGORIES.map((cat) => ({
@@ -41,12 +115,10 @@ export default function CpvSelector({ selected, onChange, disabled = false }: Pr
   }, [filteredSuggested]);
 
   function toggle(code: string) {
-    if (disabled) return;
     onChange(selected.includes(code) ? selected.filter((c) => c !== code) : [...selected, code]);
   }
 
   function addCustom() {
-    if (disabled) return;
     const code = customInput.trim();
     setCustomError(null);
     if (!code) return;
@@ -62,125 +134,108 @@ export default function CpvSelector({ selected, onChange, disabled = false }: Pr
     setCustomInput("");
   }
 
-  function selectAllSuggested() {
-    if (disabled) return;
-    const toAdd = AGENCY_CPV_CODES.map((c) => c.code).filter((c) => !selected.includes(c));
+  function selectAllVisible() {
+    const toAdd = filteredSuggested.map((c) => c.code).filter((c) => !selected.includes(c));
     onChange([...selected, ...toAdd]);
   }
 
-  function clearAll() {
-    if (disabled) return;
-    onChange([]);
-  }
-
-  // Look up a label for a selected code (may not be in AGENCY_CPV_CODES if custom)
-  function labelFor(code: string): string {
-    const entry = AGENCY_CPV_CODES.find((c) => c.code === code);
-    return entry ? entry.label : "Código personalizado";
+  function handleOpenChange(open: boolean) {
+    if (open) {
+      setSearch("");
+      setCustomInput("");
+      setCustomError(null);
+      setTimeout(() => searchRef.current?.focus(), 50);
+    }
   }
 
   return (
-    <div className="space-y-5">
-      {/* Selected codes */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-muted-foreground">
-            {selected.length === 0
-              ? "Ningún código seleccionado"
-              : `${selected.length} ${selected.length === 1 ? "código seleccionado" : "códigos seleccionados"}`}
-          </span>
-          {!disabled && selected.length > 0 && (
-            <button
-              type="button"
-              onClick={clearAll}
-              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
-            >
-              Quitar todos
-            </button>
-          )}
-        </div>
+    <Dialog onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline" size="sm">
+          + Añadir códigos CPV
+        </Button>
+      </DialogTrigger>
 
-        {selected.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {selected.map((code) => (
-              <span
-                key={code}
-                className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 text-primary border border-primary/20 px-2 py-1 text-xs font-mono"
-              >
-                <span className="font-bold">{code}</span>
-                <span className="text-primary/70 font-sans">{labelFor(code)}</span>
-                {!disabled && (
-                  <button
-                    type="button"
-                    onClick={() => toggle(code)}
-                    className="hover:text-destructive transition-colors ml-0.5 font-bold"
-                    aria-label={`Quitar ${code}`}
-                  >
-                    ×
-                  </button>
-                )}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      <DialogContent className="w-full max-w-lg flex flex-col" style={{ maxHeight: "85vh" }}>
+        <DialogHeader>
+          <DialogTitle>Códigos CPV</DialogTitle>
+          <DialogDescription>
+            Busca y selecciona los códigos CPV relevantes para este proyecto.
+          </DialogDescription>
+        </DialogHeader>
 
-      {/* Suggested codes — search + bulk actions */}
-      {!disabled && (
-        <div className="space-y-3 border-t pt-4">
-          <div className="flex gap-2 items-center">
-            <Input
-              placeholder="Buscar por código, descripción o categoría…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="text-sm h-8"
-            />
-            {filteredSuggested.length > 0 && (
+        {/* Search + summary */}
+        <div className="px-5 pt-4 pb-3 border-b border-border space-y-2">
+          <Input
+            ref={searchRef}
+            placeholder="Buscar por código, descripción o categoría…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-9 text-sm"
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              {selected.length}{" "}
+              {selected.length === 1 ? "código seleccionado" : "códigos seleccionados"}
+            </span>
+            {filteredSuggested.some((c) => !selected.includes(c.code)) && (
               <button
                 type="button"
-                onClick={selectAllSuggested}
-                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 whitespace-nowrap"
+                onClick={selectAllVisible}
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
               >
-                Añadir todos
+                Seleccionar todos los resultados
               </button>
             )}
           </div>
+        </div>
 
-          {/* Grouped suggestions */}
+        {/* Scrollable list */}
+        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-4">
           {groupedSuggested.length > 0 ? (
-            <div className="space-y-3">
-              {groupedSuggested.map(({ category, items }) => (
-                <div key={category}>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
-                    {category}
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {items.map((item) => (
-                      <button
+            groupedSuggested.map(({ category, items }) => (
+              <div key={category}>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  {category}
+                </p>
+                <div className="space-y-0.5">
+                  {items.map((item) => {
+                    const checked = selected.includes(item.code);
+                    return (
+                      <label
                         key={item.code}
-                        type="button"
-                        onClick={() => toggle(item.code)}
-                        className="inline-flex items-center gap-1 rounded-md border border-border bg-background hover:border-primary hover:bg-primary/5 px-2 py-1 text-xs transition-colors text-left"
+                        className="flex items-center gap-3 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
                       >
-                        <span className="font-mono text-muted-foreground">{item.code}</span>
-                        <span>{item.label}</span>
-                      </button>
-                    ))}
-                  </div>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggle(item.code)}
+                          className="accent-primary h-4 w-4 shrink-0"
+                        />
+                        <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">
+                          {item.code}
+                        </span>
+                        <span className="text-sm">{item.label}</span>
+                      </label>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
           ) : (
-            <p className="text-xs text-muted-foreground">
-              {query
-                ? `Sin sugerencias para "${search}"`
-                : "Todos los códigos sugeridos ya están seleccionados."}
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Sin resultados para "{search}"
             </p>
           )}
 
-          {/* Custom code input */}
-          <div className="border-t pt-3 space-y-1">
-            <p className="text-xs text-muted-foreground">Añadir código CPV personalizado</p>
+          {/* Custom code */}
+          <div className="border-t border-border pt-4 space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Código personalizado
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Introduce cualquier código CPV de 5–8 dígitos que no aparezca en la lista.
+            </p>
             <div className="flex gap-2">
               <Input
                 placeholder="Ej. 79342000"
@@ -190,7 +245,7 @@ export default function CpvSelector({ selected, onChange, disabled = false }: Pr
                   setCustomError(null);
                 }}
                 onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustom())}
-                className="max-w-[180px] text-sm h-8 font-mono"
+                className="max-w-[180px] h-8 text-sm font-mono"
               />
               <Button type="button" size="sm" variant="outline" onClick={addCustom}>
                 Añadir
@@ -199,7 +254,16 @@ export default function CpvSelector({ selected, onChange, disabled = false }: Pr
             {customError && <p className="text-xs text-destructive">{customError}</p>}
           </div>
         </div>
-      )}
-    </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-border flex justify-end">
+          <DialogClose asChild>
+            <Button type="button" size="sm">
+              Listo
+            </Button>
+          </DialogClose>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

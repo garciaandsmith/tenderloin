@@ -76,7 +76,6 @@ const NUTS_TREE: Nuts1Group[] = [
   },
 ];
 
-// All selectable leaf-level codes for "select all / clear all"
 const ALL_CODES = SPAIN_NUTS_CODES.map((n) => n.code);
 
 function allCodesInGroup(group: Nuts1Group): string[] {
@@ -98,8 +97,14 @@ interface Props {
 
 export default function NutsSelector({ selected, onChange, disabled = false }: Props) {
   const [search, setSearch] = useState("");
+  // Groups collapsed by default; expand on interaction or when searching
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(NUTS_TREE.map((g) => [g.code, true]))
+  );
 
   const query = search.trim().toLowerCase();
+  // While searching, force-expand all groups so matches are visible
+  const isSearching = query.length > 0;
 
   const visibleTree = useMemo(() => {
     if (!query) return NUTS_TREE;
@@ -111,8 +116,7 @@ export default function NutsSelector({ selected, onChange, disabled = false }: P
           const childMatches =
             child.label.toLowerCase().includes(query) || child.code.toLowerCase().includes(query);
           const filteredSub = child.sub?.filter(
-            (s) =>
-              s.label.toLowerCase().includes(query) || s.code.toLowerCase().includes(query)
+            (s) => s.label.toLowerCase().includes(query) || s.code.toLowerCase().includes(query)
           );
           if (childMatches || (filteredSub && filteredSub.length > 0)) {
             return { ...child, sub: childMatches ? child.sub : filteredSub };
@@ -139,27 +143,32 @@ export default function NutsSelector({ selected, onChange, disabled = false }: P
     if (allIn) {
       onChange(selected.filter((c) => !codes.includes(c)));
     } else {
-      const toAdd = codes.filter((c) => !selected.includes(c));
-      onChange([...selected, ...toAdd]);
+      onChange([...selected, ...codes.filter((c) => !selected.includes(c))]);
     }
   }
 
-  function selectAll() {
-    if (disabled) return;
-    onChange(ALL_CODES);
+  function toggleCollapse(code: string) {
+    setCollapsed((prev) => ({ ...prev, [code]: !prev[code] }));
   }
 
-  function clearAll() {
-    if (disabled) return;
-    onChange([]);
+  function expandAll() {
+    setCollapsed(Object.fromEntries(NUTS_TREE.map((g) => [g.code, false])));
+  }
+
+  function collapseAll() {
+    setCollapsed(Object.fromEntries(NUTS_TREE.map((g) => [g.code, true])));
   }
 
   const nationalEntry = SPAIN_NUTS_CODES.find((n) => n.code === "ES")!;
+  const nationalVisible =
+    !query ||
+    nationalEntry.label.toLowerCase().includes(query) ||
+    nationalEntry.code.toLowerCase().includes(query);
 
   return (
-    <div className="space-y-4">
-      {/* Search + bulk actions */}
-      <div className="flex gap-2">
+    <div className="space-y-3">
+      {/* Toolbar */}
+      <div className="flex gap-2 items-center">
         <Input
           placeholder="Buscar región o código…"
           value={search}
@@ -167,36 +176,59 @@ export default function NutsSelector({ selected, onChange, disabled = false }: P
           className="max-w-xs text-sm h-8"
           disabled={disabled}
         />
-        {!disabled && (
-          <div className="flex gap-1 ml-auto">
-            <button
-              type="button"
-              onClick={selectAll}
-              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
-            >
-              Seleccionar todas
-            </button>
-            <span className="text-muted-foreground text-xs">·</span>
-            <button
-              type="button"
-              onClick={clearAll}
-              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
-            >
-              Quitar todas
-            </button>
-          </div>
-        )}
+        <div className="flex gap-2 ml-auto items-center">
+          {!disabled && (
+            <>
+              <button
+                type="button"
+                onClick={() => onChange(ALL_CODES)}
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                Seleccionar todas
+              </button>
+              <span className="text-muted-foreground text-xs">·</span>
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                Quitar todas
+              </button>
+              <span className="text-muted-foreground text-xs">·</span>
+            </>
+          )}
+          {!isSearching && (
+            <>
+              <button
+                type="button"
+                onClick={expandAll}
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                Expandir
+              </button>
+              <span className="text-muted-foreground text-xs">·</span>
+              <button
+                type="button"
+                onClick={collapseAll}
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                Colapsar
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Selection summary */}
+      {/* Selection count */}
       {selected.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          {selected.length} {selected.length === 1 ? "región seleccionada" : "regiones seleccionadas"}
+          {selected.length}{" "}
+          {selected.length === 1 ? "región seleccionada" : "regiones seleccionadas"}
         </p>
       )}
 
       {/* National option */}
-      {(!query || nationalEntry.label.toLowerCase().includes(query) || nationalEntry.code.toLowerCase().includes(query)) && (
+      {nationalVisible && (
         <CheckRow
           code={nationalEntry.code}
           label={nationalEntry.label}
@@ -208,63 +240,83 @@ export default function NutsSelector({ selected, onChange, disabled = false }: P
       )}
 
       {/* Grouped tree */}
-      <div className="space-y-4">
+      <div className="space-y-1">
         {visibleTree.map((group) => {
           const groupCodes = allCodesInGroup(group);
           const allIn = groupCodes.every((c) => selected.includes(c));
-          const someIn = groupCodes.some((c) => selected.includes(c));
+          const someIn = !allIn && groupCodes.some((c) => selected.includes(c));
+          const isOpen = isSearching || !collapsed[group.code];
+          const selectedInGroup = groupCodes.filter((c) => selected.includes(c)).length;
 
           return (
-            <div key={group.code} className="space-y-1">
-              {/* Group header */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  {group.label}
-                  <span className="font-normal ml-1 normal-case tracking-normal text-muted-foreground/60">
-                    ({group.code})
-                  </span>
-                </span>
+            <div key={group.code} className="rounded-md border border-border overflow-hidden">
+              {/* Collapsible group header */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 hover:bg-muted/70 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => toggleCollapse(group.code)}
+                  className="flex items-center gap-2 flex-1 text-left min-w-0"
+                >
+                  <ChevronIcon open={isOpen} />
+                  <span className="text-xs font-semibold truncate">{group.label}</span>
+                  <span className="text-xs text-muted-foreground font-mono">{group.code}</span>
+                  {selectedInGroup > 0 && (
+                    <span className="ml-1 inline-flex items-center rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary tabular-nums">
+                      {selectedInGroup}
+                    </span>
+                  )}
+                </button>
+
+                {/* Select-all for group */}
                 {!disabled && (
                   <button
                     type="button"
-                    onClick={() => toggleGroup(group)}
-                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 ml-auto"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleGroup(group);
+                    }}
+                    className={`text-xs underline underline-offset-2 whitespace-nowrap transition-colors ${
+                      allIn
+                        ? "text-primary hover:text-primary/70"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
                   >
                     {allIn ? "Quitar" : someIn ? "Completar" : "Todas"}
                   </button>
                 )}
               </div>
 
-              {/* NUTS-2 children */}
-              <div className="pl-3 border-l border-border space-y-1">
-                {group.children.map((child) => (
-                  <div key={child.code}>
-                    <CheckRow
-                      code={child.code}
-                      label={child.label}
-                      checked={selected.includes(child.code)}
-                      onToggle={() => toggle(child.code)}
-                      disabled={disabled}
-                    />
-                    {/* NUTS-3 sub-entries */}
-                    {child.sub && child.sub.length > 0 && (
-                      <div className="pl-5 border-l border-border/50 ml-1 mt-0.5 space-y-0.5">
-                        {child.sub.map((sub) => (
-                          <CheckRow
-                            key={sub.code}
-                            code={sub.code}
-                            label={sub.label}
-                            checked={selected.includes(sub.code)}
-                            onToggle={() => toggle(sub.code)}
-                            disabled={disabled}
-                            muted
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              {/* Children (collapsible) */}
+              {isOpen && (
+                <div className="px-3 py-2 space-y-1 border-t border-border/50">
+                  {group.children.map((child) => (
+                    <div key={child.code}>
+                      <CheckRow
+                        code={child.code}
+                        label={child.label}
+                        checked={selected.includes(child.code)}
+                        onToggle={() => toggle(child.code)}
+                        disabled={disabled}
+                      />
+                      {child.sub && child.sub.length > 0 && (
+                        <div className="pl-5 border-l border-border/40 ml-1.5 mt-0.5 space-y-0.5">
+                          {child.sub.map((sub) => (
+                            <CheckRow
+                              key={sub.code}
+                              code={sub.code}
+                              label={sub.label}
+                              checked={selected.includes(sub.code)}
+                              onToggle={() => toggle(sub.code)}
+                              disabled={disabled}
+                              muted
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -274,6 +326,20 @@ export default function NutsSelector({ selected, onChange, disabled = false }: P
         <p className="text-xs text-muted-foreground">Sin resultados para "{search}"</p>
       )}
     </div>
+  );
+}
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      className={`shrink-0 text-muted-foreground transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+    >
+      <path d="M4 2.5L7.5 6L4 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -296,8 +362,8 @@ function CheckRow({
 }) {
   return (
     <label
-      className={`flex items-center gap-2 cursor-pointer group select-none py-0.5 ${
-        disabled ? "cursor-default" : ""
+      className={`flex items-center gap-2 select-none py-0.5 ${
+        disabled ? "cursor-default" : "cursor-pointer"
       }`}
     >
       <input
@@ -305,7 +371,7 @@ function CheckRow({
         checked={checked}
         onChange={onToggle}
         disabled={disabled}
-        className="accent-primary h-3.5 w-3.5 rounded"
+        className="accent-primary h-3.5 w-3.5 rounded shrink-0"
       />
       <span
         className={`text-sm leading-tight ${

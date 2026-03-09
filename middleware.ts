@@ -1,66 +1,32 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-export async function middleware(request: NextRequest) {
-  // Fail loudly if env vars are missing so the Vercel logs show a clear message
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    console.error(
-      "[middleware] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY. " +
-      "Add them in Vercel → Settings → Environment Variables, then redeploy."
-    );
-    return NextResponse.next({ request });
-  }
-
-  let supabaseResponse = NextResponse.next({ request });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  // Refresh the session — do NOT remove this.
-  let user = null;
-  try {
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
-  } catch (e) {
-    console.error("[middleware] supabase.auth.getUser() threw:", e);
-    // Treat as unauthenticated — individual routes will enforce auth as needed.
-  }
-
+export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
+  // Check for a Supabase session cookie (sb-<project-ref>-auth-token).
+  // Full cryptographic verification happens in server components via
+  // supabase.auth.getUser() — this check is purely for redirect UX.
+  const hasSession = request.cookies
+    .getAll()
+    .some(
+      (c) => c.name.startsWith("sb-") && c.name.endsWith("-auth-token")
+    );
+
   // Redirect unauthenticated users to login
-  if (!user && !pathname.startsWith("/login") && !pathname.startsWith("/api/auth")) {
+  if (!hasSession && !pathname.startsWith("/login") && !pathname.startsWith("/api/auth")) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
   // Redirect authenticated users away from the login page
-  if (user && pathname === "/login") {
+  if (hasSession && pathname === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  return supabaseResponse;
+  return NextResponse.next({ request });
 }
 
 export const config = {

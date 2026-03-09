@@ -35,9 +35,14 @@ export async function middleware(request: NextRequest) {
   );
 
   // Refresh the session — do NOT remove this.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch (e) {
+    console.error("[middleware] supabase.auth.getUser() threw:", e);
+    // Treat as unauthenticated — individual routes will enforce auth as needed.
+  }
 
   const pathname = request.nextUrl.pathname;
 

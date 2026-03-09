@@ -11,15 +11,31 @@ export default function LoginForm() {
   const router = useRouter();
   const supabase = createClient();
 
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setMessage(null);
+
+    if (mode === "signup") {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+      setMessage("Cuenta creada. Revisa tu email para confirmarla, luego inicia sesión.");
+      setMode("signin");
+      setLoading(false);
+      return;
+    }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -66,18 +82,45 @@ export default function LoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              autoComplete="current-password"
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {message && <p className="text-sm text-green-600">{message}</p>}
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Iniciando sesión…" : "Iniciar sesión"}
+            {loading
+              ? mode === "signup" ? "Creando cuenta…" : "Iniciando sesión…"
+              : mode === "signup" ? "Crear cuenta" : "Iniciar sesión"}
           </Button>
         </form>
+
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          {mode === "signin" ? (
+            <>
+              ¿Sin cuenta?{" "}
+              <button
+                type="button"
+                onClick={() => { setMode("signup"); setError(null); setMessage(null); }}
+                className="underline hover:text-foreground"
+              >
+                Crear una
+              </button>
+            </>
+          ) : (
+            <>
+              ¿Ya tienes cuenta?{" "}
+              <button
+                type="button"
+                onClick={() => { setMode("signin"); setError(null); setMessage(null); }}
+                className="underline hover:text-foreground"
+              >
+                Iniciar sesión
+              </button>
+            </>
+          )}
+        </p>
       </div>
     </div>
   );

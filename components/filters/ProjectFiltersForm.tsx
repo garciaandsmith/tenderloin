@@ -273,6 +273,44 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function CheckboxGroup<T extends Record<string, string>>({
+  items,
+  selected,
+  onToggle,
+  idKey,
+  labelKey,
+}: {
+  items: T[];
+  selected: string[];
+  onToggle: (v: string) => void;
+  idKey: keyof T;
+  labelKey: keyof T;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => {
+        const value = item[idKey];
+        const label = item[labelKey];
+        const checked = selected.includes(value);
+        return (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onToggle(value)}
+            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+              checked
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background border-border text-muted-foreground hover:border-primary"
+            }`}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function TagInput({
   tags,
   onRemove,

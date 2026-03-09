@@ -70,7 +70,7 @@ npm run dev
 ### Run the capture pipeline locally
 
 ```bash
-pip install -r requirements.txt
+pip install -r pipeline/requirements.txt
 python pipeline/run_capture.py --source-url file://data/sample.json
 ```
 

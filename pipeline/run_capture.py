@@ -5,10 +5,10 @@ import os
 from pathlib import Path
 import logging
 
-from app.capture.placsp_client import PlacspClient, PlacspClientConfig
-from app.capture.service import CaptureService
-from app.capture.state_store import StateStore
-from app.capture.storage import RawTenderRepository
+from pipeline.capture.placsp_client import PlacspClient, PlacspClientConfig
+from pipeline.capture.service import CaptureService
+from pipeline.capture.state_store import StateStore
+from pipeline.capture.storage import RawTenderRepository
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,8 +41,8 @@ def _build_repository_and_state(args: argparse.Namespace):
 
     if supabase_url and supabase_key:
         logging.getLogger(__name__).info("Using Supabase backend")
-        from app.capture.storage_supabase import SupabaseRawTenderRepository
-        from app.capture.state_store_supabase import SupabaseStateStore
+        from pipeline.capture.storage_supabase import SupabaseRawTenderRepository
+        from pipeline.capture.state_store_supabase import SupabaseStateStore
 
         return (
             SupabaseRawTenderRepository(supabase_url, supabase_key),

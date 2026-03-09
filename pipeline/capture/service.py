@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 import logging
 from typing import Optional
 
-from app.capture.placsp_client import PlacspClient
-from app.capture.state_store import StateStore
-from app.capture.storage import RawTenderRepository
+from pipeline.capture.placsp_client import PlacspClient
+from pipeline.capture.state_store import StateStore
+from pipeline.capture.storage import RawTenderRepository
 
 logger = logging.getLogger(__name__)
 

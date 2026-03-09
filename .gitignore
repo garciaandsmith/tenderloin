@@ -1,2 +1,42 @@
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Data & runtime
+/data/runtime/
 /archivo/
 prompt_inicial.txt
+
+# Node.js / Next.js
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+/coverage
+/.next/
+/out/
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files
+.env*.local
+.env
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts

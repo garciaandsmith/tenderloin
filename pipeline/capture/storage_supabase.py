@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Iterable
 
-from app.capture.models import TenderRaw
+from pipeline.capture.models import TenderRaw
 
 
 class SupabaseRawTenderRepository:

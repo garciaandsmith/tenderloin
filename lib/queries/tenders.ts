@@ -1,25 +1,37 @@
 import { createClient } from "@/lib/supabase/server";
-import type { InboxTender, ScoreDistribution, TrainingTender } from "@/lib/types/app.types";
+import { getProjectFilters } from "@/lib/queries/projects";
+import type { InboxTender, ScoreDistribution, TrainingTender, ProjectFilters } from "@/lib/types/app.types";
 
-/** Fetch tenders that pass the project's hard filters, have a future deadline,
- *  and are ordered by model score (desc). Used in the Inbox. */
+/** Apply project hard-filters directly to a tenders_raw query builder.
+ *  Eliminates the dependency on tender_filter_results (which is populated by the
+ *  offline pipeline and may be empty until Phase 2 is implemented). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyHardFilters(query: any, filters: ProjectFilters | null): any {
+  if (!filters) return query;
+  if (filters.budget_min != null) query = query.gte("budget_amount", filters.budget_min);
+  if (filters.budget_max != null) query = query.lte("budget_amount", filters.budget_max);
+  if (filters.regions && filters.regions.length > 0) query = query.in("region", filters.regions);
+  if (filters.cpv_codes && filters.cpv_codes.length > 0) {
+    query = query.or(filters.cpv_codes.map((c: string) => `cpv.like.${c}%`).join(","));
+  }
+  return query;
+}
+
+/** Fetch tenders matching the project's hard filters with a future deadline.
+ *  Ordered by published_at desc (model scores are populated by the offline pipeline). */
 export async function getInboxTenders(projectId: string): Promise<InboxTender[]> {
   const supabase = await createClient();
+  const filters = await getProjectFilters(projectId);
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("tenders_raw")
-    .select(
-      `
-      *,
-      tender_filter_results!inner ( passed, project_id ),
-      tender_model_scores ( model_score, project_id, model_version )
-    `
-    )
-    .eq("tender_filter_results.project_id", projectId)
-    .eq("tender_filter_results.passed", true)
+    .select("*, tender_model_scores ( model_score, project_id, model_version )")
     .gt("deadline_at", new Date().toISOString())
     .order("published_at", { ascending: false });
 
+  query = applyHardFilters(query, filters);
+
+  const { data, error } = await query;
   if (error) throw error;
 
   return (data ?? []).map((row) => {
@@ -36,8 +48,8 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
           b.model_version.localeCompare(a.model_version)
       )[0];
 
-    const { tender_filter_results: _tfr, tender_model_scores: _tms, ...tender } = row as Record<string, unknown>;
-    void _tfr; void _tms;
+    const { tender_model_scores: _tms, ...tender } = row as Record<string, unknown>;
+    void _tms;
 
     return {
       ...(tender as Parameters<typeof Object.assign>[0]),
@@ -48,17 +60,18 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
 }
 
 /** Fetch the next unscored tender for the training queue.
- *  Returns tenders that pass hard filters but have NOT yet been scored by this user. */
+ *  Returns tenders matching the project's hard filters that have NOT yet been
+ *  scored by this user. */
 export async function getNextTrainingTender(
   projectId: string,
   userId: string
 ): Promise<TrainingTender | null> {
   const supabase = await createClient();
+  const filters = await getProjectFilters(projectId);
 
-  // Subquery-style: get already-scored tender IDs for this user/project
   const { data: scoredRows } = await supabase
     .from("tender_scores")
-    .select("*")
+    .select("tender_id")
     .eq("project_id", projectId)
     .eq("scored_by", userId);
 
@@ -66,11 +79,11 @@ export async function getNextTrainingTender(
 
   let query = supabase
     .from("tenders_raw")
-    .select("*, tender_filter_results!inner(*)")
-    .eq("tender_filter_results.project_id", projectId)
-    .eq("tender_filter_results.passed", true)
+    .select("id, title, summary, buyer_name, budget_amount, published_at")
     .order("published_at", { ascending: false })
     .limit(1);
+
+  query = applyHardFilters(query, filters);
 
   if (scoredIds.length > 0) {
     query = query.not("id", "in", `(${scoredIds.join(",")})`);
@@ -80,11 +93,7 @@ export async function getNextTrainingTender(
   if (error) throw error;
   if (!data || data.length === 0) return null;
 
-  const row = data[0] as Record<string, unknown>;
-  const { tender_filter_results: _tfr, ...tender } = row;
-  void _tfr;
-
-  return tender as TrainingTender;
+  return data[0] as TrainingTender;
 }
 
 /** Fetch the score distribution (count per score 0-5) for a project.

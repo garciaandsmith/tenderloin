@@ -11,17 +11,25 @@
 
 ## Ejecución recomendada (diaria)
 
+La fuente de datos son los **resúmenes diarios** (ZIPs mensuales actualizados a diario) que publica
+la Plataforma de Contratación del Sector Público en abierto, sin necesidad de registro como actor
+empresarial. La URL tiene la forma:
+`https://contrataciondelsectorpublico.gob.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto3_AAAAMM.zip`
+
 ```bash
-python -m app.run_capture \
+python -m pipeline.run_capture \
   --db-path data/runtime/tenderloin.db \
-  --source-url "https://contrataciondelestado.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto.xml" \
   --overlap-minutes 120
 ```
+
+La URL por defecto apunta siempre al ZIP del mes en curso. Si el archivo del mes actual no está
+disponible todavía (primeros días del mes), el script usa automáticamente el ZIP del mes anterior
+como fallback.
 
 ## Programación cada 24 horas (cron)
 
 ```cron
-0 7 * * * cd /ruta/al/repo && /usr/bin/python3 -m app.run_capture --db-path data/runtime/tenderloin.db >> logs/capture.log 2>&1
+0 7 * * * cd /ruta/al/repo && /usr/bin/python3 -m pipeline.run_capture --db-path data/runtime/tenderloin.db >> logs/capture.log 2>&1
 ```
 
 ## Parámetro de robustez incremental

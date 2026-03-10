@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import io
@@ -28,6 +28,7 @@ class PlacspClientConfig:
     source_name: str = "placsp"
     retry_attempts: int = 3
     retry_backoff_seconds: float = 1.0
+    fallback_urls: list = field(default_factory=list)
 
 
 class PlacspClient:
@@ -39,17 +40,46 @@ class PlacspClient:
     def fetch_since(self, since: Optional[datetime]) -> List[TenderRaw]:
         url = self.config.source_url
         if url.lower().endswith(".zip"):
-            return self._fetch_zip(url, since)
+            fallbacks = [u for u in self.config.fallback_urls if u.lower().endswith(".zip")]
+            return self._fetch_zip_with_fallback([url] + fallbacks, since)
         payload = self._download_payload(since)
         if payload.lstrip().startswith("{") or payload.lstrip().startswith("["):
             return self._parse_json(payload)
         return self._parse_atom(payload)
 
-    # ── ZIP (open-data monthly dump) ──────────────────────────────────────────
+    # ── ZIP (open-data monthly dump / resumen diario) ─────────────────────────
+
+    def _fetch_zip_with_fallback(self, urls: List[str], since: Optional[datetime]) -> List[TenderRaw]:
+        """Try each URL in order; move to the next if a download or parse error occurs."""
+        last_exc: Exception | None = None
+        for url in urls:
+            try:
+                return self._fetch_zip(url, since)
+            except (HTTPError, URLError, zipfile.BadZipFile, RuntimeError) as exc:
+                logger.warning(
+                    "Failed to fetch ZIP from %s: %s — %s",
+                    url,
+                    type(exc).__name__,
+                    exc,
+                )
+                last_exc = exc
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("No ZIP URLs succeeded and no exception was recorded")
 
     def _fetch_zip(self, url: str, since: Optional[datetime]) -> List[TenderRaw]:
         logger.info("Downloading open-data ZIP from %s", url)
         raw = self._download_bytes(url)
+
+        # Detect HTML error/login pages returned with 200 OK
+        preview_bytes = raw[:200].decode("utf-8", errors="replace").lstrip()
+        if preview_bytes.lower().startswith(("<!doc", "<html")):
+            preview = " ".join(preview_bytes.split())[:300]
+            raise RuntimeError(
+                f"Server returned HTML instead of a ZIP for {url} — "
+                f"likely an access error (IP blocked or auth required). Preview: {preview!r}"
+            )
+
         tenders: List[TenderRaw] = []
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
             xml_names = sorted(n for n in zf.namelist() if n.lower().endswith((".xml", ".atom")))
@@ -171,7 +201,7 @@ class PlacspClient:
             )
             buyer_name = (
                 _find_nested_text(entry, "LocatedContractingParty", "Name")
-                or _find_first_text_by_localname(entry, ["BuyerProfile", "ContractingParty"])
+                or _find_first_text_by_localname(entry, ["BuyerProfile", "ContractingParty", "PartyName"])
                 or ""
             )
             region = _find_first_text_by_localname(entry, ["CountrySubentityCode", "NUTSCode", "Region", "PlaceExecution"]) or ""

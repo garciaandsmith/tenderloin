@@ -12,7 +12,7 @@ import {
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
-import { AGENCY_CPV_CODES } from "@/lib/utils/cpv";
+import { AGENCY_CPV_CODES, type CpvEntry } from "@/lib/utils/cpv";
 
 const CATEGORIES = [...new Set(AGENCY_CPV_CODES.map((c) => c.category))];
 
@@ -93,29 +93,54 @@ function CpvPickerModal({
   const [search, setSearch] = useState("");
   const [customInput, setCustomInput] = useState("");
   const [customError, setCustomError] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(CATEGORIES.map((cat) => [cat, true]))
+  );
   const searchRef = useRef<HTMLInputElement>(null);
 
   const query = search.trim().toLowerCase();
+  const isSearching = query.length > 0;
 
-  const filteredSuggested = useMemo(() => {
-    if (!query) return AGENCY_CPV_CODES;
-    return AGENCY_CPV_CODES.filter(
-      (c) =>
-        c.code.includes(query) ||
-        c.label.toLowerCase().includes(query) ||
-        c.category.toLowerCase().includes(query)
-    );
+  const filteredByCategory = useMemo(() => {
+    return CATEGORIES.map((cat) => {
+      const items = AGENCY_CPV_CODES.filter((c) => c.category === cat);
+      if (!query) return { category: cat, items };
+      const filtered = items.filter(
+        (c) =>
+          c.code.includes(query) ||
+          c.label.toLowerCase().includes(query) ||
+          c.category.toLowerCase().includes(query)
+      );
+      return { category: cat, items: filtered };
+    }).filter((g) => g.items.length > 0);
   }, [query]);
 
-  const groupedSuggested = useMemo(() => {
-    return CATEGORIES.map((cat) => ({
-      category: cat,
-      items: filteredSuggested.filter((c) => c.category === cat),
-    })).filter((g) => g.items.length > 0);
-  }, [filteredSuggested]);
+  const allFilteredItems = useMemo(
+    () => filteredByCategory.flatMap((g) => g.items),
+    [filteredByCategory]
+  );
 
   function toggle(code: string) {
     onChange(selected.includes(code) ? selected.filter((c) => c !== code) : [...selected, code]);
+  }
+
+  function toggleCategory(cat: string) {
+    const codes = AGENCY_CPV_CODES.filter((c) => c.category === cat).map((c) => c.code);
+    const allIn = codes.every((c) => selected.includes(c));
+    if (allIn) {
+      onChange(selected.filter((c) => !codes.includes(c)));
+    } else {
+      onChange([...selected, ...codes.filter((c) => !selected.includes(c))]);
+    }
+  }
+
+  function toggleCollapse(cat: string) {
+    setCollapsed((prev) => ({ ...prev, [cat]: !prev[cat] }));
+  }
+
+  function selectAllVisible() {
+    const toAdd = allFilteredItems.map((c) => c.code).filter((c) => !selected.includes(c));
+    onChange([...selected, ...toAdd]);
   }
 
   function addCustom() {
@@ -134,16 +159,12 @@ function CpvPickerModal({
     setCustomInput("");
   }
 
-  function selectAllVisible() {
-    const toAdd = filteredSuggested.map((c) => c.code).filter((c) => !selected.includes(c));
-    onChange([...selected, ...toAdd]);
-  }
-
   function handleOpenChange(open: boolean) {
     if (open) {
       setSearch("");
       setCustomInput("");
       setCustomError(null);
+      setCollapsed(Object.fromEntries(CATEGORIES.map((cat) => [cat, true])));
       setTimeout(() => searchRef.current?.focus(), 50);
     }
   }
@@ -160,11 +181,11 @@ function CpvPickerModal({
         <DialogHeader>
           <DialogTitle>Códigos CPV</DialogTitle>
           <DialogDescription>
-            Busca y selecciona los códigos CPV relevantes para este proyecto.
+            Selecciona los códigos CPV relevantes para este proyecto.
           </DialogDescription>
         </DialogHeader>
 
-        {/* Search + summary */}
+        {/* Search + global actions */}
         <div className="px-5 pt-4 pb-3 border-b border-border space-y-2">
           <Input
             ref={searchRef}
@@ -178,53 +199,87 @@ function CpvPickerModal({
               {selected.length}{" "}
               {selected.length === 1 ? "código seleccionado" : "códigos seleccionados"}
             </span>
-            {filteredSuggested.some((c) => !selected.includes(c.code)) && (
+            {allFilteredItems.some((c) => !selected.includes(c.code)) && (
               <button
                 type="button"
                 onClick={selectAllVisible}
                 className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
               >
-                Seleccionar todos los resultados
+                {isSearching ? "Seleccionar todos los resultados" : "Seleccionar todos"}
               </button>
             )}
           </div>
         </div>
 
-        {/* Scrollable list */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 space-y-4">
-          {groupedSuggested.length > 0 ? (
-            groupedSuggested.map(({ category, items }) => (
-              <div key={category}>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  {category}
-                </p>
-                <div className="space-y-0.5">
-                  {items.map((item) => {
-                    const checked = selected.includes(item.code);
-                    return (
-                      <label
-                        key={item.code}
-                        className="flex items-center gap-3 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none"
+        {/* Scrollable category list */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 space-y-2">
+          {filteredByCategory.length > 0 ? (
+            filteredByCategory.map(({ category, items }) => {
+              const allCodes = AGENCY_CPV_CODES.filter((c) => c.category === category).map(
+                (c) => c.code
+              );
+              const selectedInCat = allCodes.filter((c) => selected.includes(c)).length;
+              const allIn = selectedInCat === allCodes.length;
+              const someIn = selectedInCat > 0 && !allIn;
+              const isOpen = isSearching || !collapsed[category];
+
+              return (
+                <div key={category} className="rounded-md border border-border overflow-hidden">
+                  {/* Category header */}
+                  <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 hover:bg-muted/70 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapse(category)}
+                      className="flex items-center gap-2 flex-1 text-left min-w-0"
+                    >
+                      <ChevronIcon open={isOpen} />
+                      <span className="text-xs font-semibold truncate">{category}</span>
+                      <span
+                        className={`ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums shrink-0 ${
+                          selectedInCat > 0
+                            ? "bg-primary/15 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggle(item.code)}
-                          className="accent-primary h-4 w-4 shrink-0"
+                        {selectedInCat}/{items.length}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCategory(category);
+                      }}
+                      className={`text-xs underline underline-offset-2 whitespace-nowrap transition-colors shrink-0 ${
+                        allIn
+                          ? "text-primary hover:text-primary/70"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {allIn ? "Quitar" : someIn ? "Completar" : "Todas"}
+                    </button>
+                  </div>
+
+                  {/* Items grid */}
+                  {isOpen && (
+                    <div className="grid grid-cols-2 gap-0.5 px-3 py-2 border-t border-border/50">
+                      {items.map((item) => (
+                        <CpvCheckRow
+                          key={item.code}
+                          item={item}
+                          checked={selected.includes(item.code)}
+                          onToggle={() => toggle(item.code)}
+                          highlight={query}
                         />
-                        <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">
-                          {item.code}
-                        </span>
-                        <span className="text-sm">{item.label}</span>
-                      </label>
-                    );
-                  })}
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <p className="text-sm text-muted-foreground text-center py-8">
-              Sin resultados para "{search}"
+              Sin resultados para «{search}»
             </p>
           )}
 
@@ -260,10 +315,81 @@ function CpvPickerModal({
           <DialogClose asChild>
             <Button type="button" size="sm">
               Listo
+              {selected.length > 0 && (
+                <span className="ml-1.5 text-xs opacity-70">· {selected.length}</span>
+              )}
             </Button>
           </DialogClose>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function CpvCheckRow({
+  item,
+  checked,
+  onToggle,
+  highlight,
+}: {
+  item: CpvEntry;
+  checked: boolean;
+  onToggle: () => void;
+  highlight: string;
+}) {
+  return (
+    <label className="flex items-start gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/50 transition-colors select-none">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        className="accent-primary h-4 w-4 shrink-0 mt-0.5"
+      />
+      <span className="min-w-0">
+        <span className="font-mono text-xs text-muted-foreground block">
+          <Highlight text={item.code} query={highlight} />
+        </span>
+        <span className="text-xs leading-tight line-clamp-2">
+          <Highlight text={item.label} query={highlight} />
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-100 text-yellow-900 rounded-[2px] px-0.5 not-italic font-inherit">
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      className={`shrink-0 text-muted-foreground transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+    >
+      <path
+        d="M4 2.5L7.5 6L4 9.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

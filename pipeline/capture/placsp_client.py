@@ -65,7 +65,15 @@ class PlacspClient:
             try:
                 request = Request(url, headers=headers)
                 with urlopen(request, timeout=self.config.timeout_seconds) as response:  # noqa: S310
-                    return response.read().decode("utf-8", errors="replace")
+                    content_type = response.headers.get("Content-Type", "")
+                    body = response.read().decode("utf-8", errors="replace")
+                    if "text/html" in content_type or body.lstrip()[:100].lower().startswith("<html"):
+                        preview = " ".join(body.split())[:300]
+                        raise RuntimeError(
+                            f"PLACSP returned HTML instead of XML — likely an access error "
+                            f"(certificate not authorised or IP blocked). Preview: {preview!r}"
+                        )
+                    return body
             except (HTTPError, URLError, TimeoutError) as exc:
                 last_error = exc
                 logger.warning(
@@ -85,7 +93,6 @@ class PlacspClient:
         raise RuntimeError("Unknown download error without exception")
 
     def _parse_atom(self, xml_text: str) -> List[TenderRaw]:
-        print(xml_text[:500])
         root = ET.fromstring(xml_text)
         tenders: List[TenderRaw] = []
 

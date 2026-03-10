@@ -33,7 +33,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python pipeline/run_capture.py
+        run: python -m pipeline.run_capture
 
       - name: Notify on failure
         if: failure()

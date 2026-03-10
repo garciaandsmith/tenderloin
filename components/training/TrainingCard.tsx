@@ -69,6 +69,11 @@ export default function TrainingCard({ tender, projectId }: Props) {
       {/* Scoring */}
       <div className="border-t bg-muted/30 px-6 py-4">
         <ScoreButtons onScore={handleScore} disabled={scoring} selected={selected} />
+        {scoring && (
+          <p className="text-center text-xs text-muted-foreground mt-3 animate-pulse">
+            Guardando puntuación…
+          </p>
+        )}
       </div>
     </div>
   );

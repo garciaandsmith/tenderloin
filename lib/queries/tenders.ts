@@ -34,7 +34,7 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
   const { data, error } = await query;
   if (error) throw error;
 
-  return (data ?? []).map((row) => {
+  const mapped = (data ?? []).map((row) => {
     const modelScores = Array.isArray(row.tender_model_scores)
       ? row.tender_model_scores
       : row.tender_model_scores
@@ -56,6 +56,16 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
       model_score: projectModelScore?.model_score ?? null,
       human_score_avg: null,
     } as InboxTender;
+  });
+
+  // Sort by model_score DESC (nulls last), then by published_at DESC as tiebreaker.
+  return mapped.sort((a, b) => {
+    if (a.model_score !== null && b.model_score !== null) {
+      return b.model_score - a.model_score;
+    }
+    if (a.model_score !== null) return -1;
+    if (b.model_score !== null) return 1;
+    return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
   });
 }
 

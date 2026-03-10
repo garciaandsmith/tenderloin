@@ -17,14 +17,17 @@ class SupabaseStateStore:
         self._client = create_client(supabase_url, service_role_key)
 
     def get_last_run_at(self, key: str = "capture.last_successful_run_at") -> Optional[datetime]:
-        response = (
-            self._client.table("pipeline_state")
-            .select("value")
-            .eq("key", key)
-            .maybe_single()
-            .execute()
-        )
-        if not response.data:
+        try:
+            response = (
+                self._client.table("pipeline_state")
+                .select("value")
+                .eq("key", key)
+                .maybe_single()
+                .execute()
+            )
+        except Exception:
+            return None
+        if response is None or not response.data:
             return None
         return datetime.fromisoformat(response.data["value"])
 

@@ -169,8 +169,12 @@ class PlacspClient:
             deadline_at = _parse_datetime(
                 _find_first_text_by_localname(entry, ["DeadlineDate", "EndDate", "PresentationPeriod"])
             )
-            buyer_name = _find_first_text_by_localname(entry, ["PartyName", "BuyerProfile", "ContractingParty"]) or ""
-            region = _find_first_text_by_localname(entry, ["NUTSCode", "Region", "PlaceExecution"]) or ""
+            buyer_name = (
+                _find_nested_text(entry, "LocatedContractingParty", "Name")
+                or _find_first_text_by_localname(entry, ["BuyerProfile", "ContractingParty"])
+                or ""
+            )
+            region = _find_first_text_by_localname(entry, ["CountrySubentityCode", "NUTSCode", "Region", "PlaceExecution"]) or ""
             cpv = _find_first_text_by_localname(entry, ["ItemClassificationCode", "CPV", "CPVCode"]) or ""
             budget_amount = _parse_float(
                 _find_first_text_by_localname(entry, ["TotalAmount", "BudgetAmount", "EstimatedOverallContractAmount"])
@@ -229,6 +233,20 @@ def _localname(tag: str) -> str:
     if "}" in tag:
         return tag.rsplit("}", 1)[1]
     return tag
+
+
+def _find_nested_text(node: ET.Element, parent_localname: str, child_localname: str) -> str:
+    """Find the first element matching parent_localname, then return text of child_localname within it."""
+    parent_key = parent_localname.lower()
+    child_key = child_localname.lower()
+    for element in node.iter():
+        if _localname(element.tag).lower() == parent_key:
+            for child in element.iter():
+                if _localname(child.tag).lower() == child_key:
+                    value = _text(child)
+                    if value:
+                        return value
+    return ""
 
 
 def _find_first_text_by_localname(node: ET.Element, local_names: Iterable[str]) -> str:

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import os
 from pathlib import Path
 import logging
 
 from pipeline.capture.placsp_client import PlacspClient, PlacspClientConfig
+
+_today = date.today()
+_DEFAULT_SOURCE_URL = (
+    "https://contrataciondelsectorpublico.gob.es/sindicacion/sindicacion_643/"
+    f"licitacionesPerfilesContratanteCompleto3_{_today.year}{_today.month:02d}.zip"
+)
 from pipeline.capture.service import CaptureService
 from pipeline.capture.state_store import StateStore
 from pipeline.capture.storage import RawTenderRepository
@@ -20,8 +27,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--source-url",
-        default="https://contrataciondelestado.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto.xml",
-        help="PLACSP Atom feed URL or file:// path to local JSON/XML payload",
+        default=_DEFAULT_SOURCE_URL,
+        help="PLACSP open-data ZIP URL, Atom feed URL, or file:// path to local JSON/XML payload",
     )
     parser.add_argument("--timeout", type=int, default=30, help="HTTP timeout in seconds")
     parser.add_argument("--log-level", default="INFO", help="Log level")

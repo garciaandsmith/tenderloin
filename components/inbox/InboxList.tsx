@@ -23,12 +23,20 @@ export default function InboxList({ tenders, projectId }: Props) {
     );
   }
 
+  const scoredCount = tenders.filter((t) => t.model_score !== null).length;
+
   return (
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-muted-foreground">
           {tenders.length} licitación{tenders.length !== 1 ? "es" : ""} · ordenadas por puntuación
+          {scoredCount < tenders.length && (
+            <span className="ml-2 text-xs">
+              ({scoredCount} puntuada{scoredCount !== 1 ? "s" : ""} por el modelo,{" "}
+              {tenders.length - scoredCount} pendiente{tenders.length - scoredCount !== 1 ? "s" : ""})
+            </span>
+          )}
         </p>
         <div className="hidden lg:flex items-center gap-8 text-xs text-muted-foreground pr-4">
           <span className="w-20 text-right">Publicado</span>
@@ -37,7 +45,7 @@ export default function InboxList({ tenders, projectId }: Props) {
 
       {/* Column headers */}
       <div className="hidden lg:flex items-center gap-4 px-4 py-2 border-b bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground uppercase tracking-wide">
-        <span className="w-12">Puntuación</span>
+        <span className="w-12" title="Puntuación del modelo (0 = Revisar, 5 = Ideal). «Pendiente» cuando el modelo aún no ha puntuado la licitación.">Puntuación</span>
         <span className="flex-1">Licitación</span>
         <span className="w-24 text-right">Presupuesto</span>
         <span className="w-20 text-right">Plazo</span>

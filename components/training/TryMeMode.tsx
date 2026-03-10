@@ -98,6 +98,11 @@ export default function TryMeMode({ tender, projectId }: Props) {
               ¿Qué puntuación le darías? El modelo revelará su predicción al enviar.
             </p>
             <ScoreButtons onScore={handleGuess} disabled={loading} />
+            {loading && (
+              <p className="text-center text-xs text-muted-foreground mt-3 animate-pulse">
+                Consultando predicción del modelo…
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-4">

@@ -28,6 +28,15 @@ def parse_args() -> argparse.Namespace:
         default="models",
         help="Directory where model artifacts are saved",
     )
+    parser.add_argument(
+        "--publish",
+        action="store_true",
+        help=(
+            "Publish the trained model as the 'scoring-model-latest' GitHub Release. "
+            "Requires GITHUB_TOKEN and GITHUB_REPOSITORY environment variables "
+            "(available automatically in GitHub Actions)."
+        ),
+    )
     parser.add_argument("--log-level", default="INFO", help="Log level")
     return parser.parse_args()
 
@@ -41,7 +50,7 @@ def main() -> None:
 
     from pipeline.scoring.dataset import load_dataset
     from pipeline.scoring.train import train
-    from pipeline.scoring.model_io import save_model
+    from pipeline.scoring.model_io import save_model, publish_model_release
 
     csv_path = Path(args.csv_path)
     models_dir = Path(args.models_dir)
@@ -56,6 +65,16 @@ def main() -> None:
     artifact = train(df)
 
     saved_path = save_model(artifact, models_dir)
+
+    if args.publish:
+        github_token = os.environ.get("GITHUB_TOKEN")
+        github_repo = os.environ.get("GITHUB_REPOSITORY")
+        if not github_token or not github_repo:
+            raise SystemExit(
+                "--publish requires GITHUB_TOKEN and GITHUB_REPOSITORY environment variables."
+            )
+        publish_model_release(saved_path, github_token=github_token, repo=github_repo)
+
     print(
         "train_result",
         {
@@ -63,6 +82,7 @@ def main() -> None:
             "mae": round(artifact["mae"], 4),
             "dataset_size": len(df),
             "saved_to": str(saved_path),
+            "published": args.publish,
         },
     )
 

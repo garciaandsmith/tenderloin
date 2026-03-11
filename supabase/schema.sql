@@ -265,6 +265,9 @@ create policy "tender_scores_select" on public.tender_scores
 create policy "tender_scores_insert" on public.tender_scores
   for insert with check (is_project_member(project_id) and scored_by = auth.uid());
 
+create policy "tender_scores_delete" on public.tender_scores
+  for delete using (scored_by = auth.uid());
+
 -- ── TENDER_MODEL_SCORES ──────────────────────────────────────
 create policy "model_scores_select" on public.tender_model_scores
   for select using (is_project_member(project_id) or is_admin());

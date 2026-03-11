@@ -106,15 +106,16 @@ export async function getNextTrainingTender(
   return data[0] as TrainingTender;
 }
 
-/** Fetch the score distribution (count per score 0-5) for a project.
- *  Used in the training section chart. */
-export async function getScoreDistribution(projectId: string): Promise<ScoreDistribution[]> {
+/** Fetch the score distribution (count per score 0-5) for a project and user.
+ *  Scoped to the current user so the chart reflects their personal training progress. */
+export async function getScoreDistribution(projectId: string, userId: string): Promise<ScoreDistribution[]> {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("tender_scores")
     .select("*")
-    .eq("project_id", projectId);
+    .eq("project_id", projectId)
+    .eq("scored_by", userId);
 
   if (error) throw error;
 
@@ -129,14 +130,15 @@ export async function getScoreDistribution(projectId: string): Promise<ScoreDist
   }));
 }
 
-/** Count total tenders scored in a project. */
-export async function getScoredCount(projectId: string): Promise<number> {
+/** Count total tenders scored by the current user in a project. */
+export async function getScoredCount(projectId: string, userId: string): Promise<number> {
   const supabase = await createClient();
 
   const { count, error } = await supabase
     .from("tender_scores")
     .select("*", { count: "exact", head: true })
-    .eq("project_id", projectId);
+    .eq("project_id", projectId)
+    .eq("scored_by", userId);
 
   if (error) throw error;
   return count ?? 0;

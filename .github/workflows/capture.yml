@@ -35,12 +35,26 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m pipeline.run_capture
 
-      - name: Score tenders
-        if: ${{ vars.PROJECT_ID != '' }}
+      - name: Download scoring model (or train on first run)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m pipeline.run_score --project-id ${{ vars.PROJECT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p models
+          gh release download scoring-model-latest \
+            --repo ${{ github.repository }} \
+            --pattern "scoring_v*.pkl" \
+            --dir models/ 2>/dev/null \
+          || (echo "No model release found — training from scratch…" \
+              && python -m pipeline.run_train --publish)
+
+      - name: Score tenders (all active projects)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m pipeline.run_score
 
       - name: Notify on failure
         if: failure()

@@ -27,18 +27,12 @@ jobs:
           pip install --upgrade pip
           if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
 
-      - name: Train model
+      - name: Train and publish model
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m pipeline.run_train
-
-      - name: Upload model artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: scoring-model-${{ github.run_id }}
-          path: models/scoring_v*.pkl
-          retention-days: 90
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m pipeline.run_train --publish
 
       - name: Notify on failure
         if: failure()

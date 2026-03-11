@@ -20,20 +20,38 @@ export default async function AdminPipelinePage() {
 
   if (profile?.role !== "admin") redirect("/dashboard");
 
-  const { data: stateRow } = await supabase
-    .from("pipeline_state")
-    .select("*")
-    .eq("key", "capture.last_successful_run_at")
-    .maybeSingle();
-
-  const { count: totalTenders } = await supabase
-    .from("tenders_raw")
-    .select("*", { count: "exact", head: true });
+  const [
+    { data: stateRow },
+    { count: totalTenders },
+    { count: totalModelScores },
+    { data: lastScoringRow },
+  ] = await Promise.all([
+    supabase
+      .from("pipeline_state")
+      .select("*")
+      .eq("key", "capture.last_successful_run_at")
+      .maybeSingle(),
+    supabase.from("tenders_raw").select("*", { count: "exact", head: true }),
+    supabase
+      .from("tender_model_scores")
+      .select("*", { count: "exact", head: true }),
+    supabase
+      .from("tender_model_scores")
+      .select("scored_at, model_version")
+      .order("scored_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   const lastRun = stateRow?.value ? new Date(stateRow.value) : null;
   const now = new Date();
   const hoursAgo = lastRun
     ? Math.round((now.getTime() - lastRun.getTime()) / (1000 * 60 * 60))
+    : null;
+
+  const lastScoringAt = lastScoringRow?.scored_at ? new Date(lastScoringRow.scored_at) : null;
+  const scoringHoursAgo = lastScoringAt
+    ? Math.round((now.getTime() - lastScoringAt.getTime()) / (1000 * 60 * 60))
     : null;
 
   const isStale = hoursAgo !== null && hoursAgo > 25;
@@ -48,16 +66,39 @@ export default async function AdminPipelinePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <StatCard
-          label="Última captura"
-          value={lastRun ? formatDate(lastRun.toISOString()) : "Nunca"}
-          sub={hoursAgo !== null ? `Hace ${hoursAgo}h` : undefined}
-        />
-        <StatCard
-          label="Total licitaciones"
-          value={totalTenders?.toLocaleString("es-ES") ?? "—"}
-        />
+      <div>
+        <h2 className="font-semibold mb-3">Captura</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <StatCard
+            label="Última captura"
+            value={lastRun ? formatDate(lastRun.toISOString()) : "Nunca"}
+            sub={hoursAgo !== null ? `Hace ${hoursAgo}h` : undefined}
+          />
+          <StatCard
+            label="Total licitaciones"
+            value={totalTenders?.toLocaleString("es-ES") ?? "—"}
+          />
+        </div>
+      </div>
+
+      <div>
+        <h2 className="font-semibold mb-3">Modelo de scoring</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <StatCard
+            label="Último scoring"
+            value={lastScoringAt ? formatDate(lastScoringAt.toISOString()) : "Nunca"}
+            sub={
+              scoringHoursAgo !== null
+                ? `Hace ${scoringHoursAgo}h · v${lastScoringRow?.model_version ?? "?"}`
+                : undefined
+            }
+          />
+          <StatCard
+            label="Predicciones totales"
+            value={totalModelScores?.toLocaleString("es-ES") ?? "—"}
+            sub="(tender × proyecto)"
+          />
+        </div>
       </div>
 
       <div>

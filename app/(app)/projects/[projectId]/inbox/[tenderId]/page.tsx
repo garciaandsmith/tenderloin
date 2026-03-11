@@ -5,6 +5,7 @@ import { cpvLabel } from "@/lib/utils/cpv";
 import { nutsLabel } from "@/lib/utils/nuts";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink } from "lucide-react";
+import ScoreBadge from "@/components/inbox/ScoreBadge";
 
 export const metadata = { title: "Licitación — Tenderloin" };
 
@@ -24,11 +25,21 @@ export default async function TenderDetailPage({ params }: Props) {
 
   if (!tender) notFound();
 
-  const { data: analysis } = await supabase
-    .from("tender_analysis")
-    .select("*")
-    .eq("tender_id", tender.id)
-    .maybeSingle();
+  const [{ data: analysis }, { data: modelScoreRow }] = await Promise.all([
+    supabase
+      .from("tender_analysis")
+      .select("*")
+      .eq("tender_id", tender.id)
+      .maybeSingle(),
+    supabase
+      .from("tender_model_scores")
+      .select("model_score, model_version, scored_at")
+      .eq("tender_id", tender.id)
+      .eq("project_id", projectId)
+      .order("scored_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   const deadline = daysUntil(tender.deadline_at);
 
@@ -45,9 +56,19 @@ export default async function TenderDetailPage({ params }: Props) {
       </div>
 
       <div className="rounded-lg border bg-card p-6 space-y-6">
-        <div>
-          <h1 className="text-xl font-bold leading-snug">{tender.title}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{tender.buyer_name}</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold leading-snug">{tender.title}</h1>
+            <p className="text-sm text-muted-foreground mt-1">{tender.buyer_name}</p>
+          </div>
+          <div className="shrink-0 flex flex-col items-center gap-1">
+            <ScoreBadge score={modelScoreRow?.model_score ?? null} className="text-base px-3 py-1" />
+            {modelScoreRow?.model_version && (
+              <span className="text-[10px] text-muted-foreground">
+                v{modelScoreRow.model_version}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">

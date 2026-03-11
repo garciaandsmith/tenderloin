@@ -31,7 +31,7 @@ export default function ResetTrainingButton({ projectId }: Props) {
   if (confirming) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">¿Seguro? Se borrarán todas tus puntuaciones.</span>
+        <span className="text-xs text-muted-foreground">¿Seguro? Se borrarán todas las puntuaciones del proyecto.</span>
         <button
           onClick={handleReset}
           disabled={resetting}

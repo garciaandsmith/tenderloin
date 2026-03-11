@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 
 export async function resetTrainingScores(projectId: string): Promise<{ error?: string }> {
   const supabase = await createClient();
@@ -11,11 +11,11 @@ export async function resetTrainingScores(projectId: string): Promise<{ error?: 
 
   if (!user) return { error: "Unauthorized" };
 
-  const { error } = await supabase
+  const admin = await createAdminClient();
+  const { error } = await admin
     .from("tender_scores")
     .delete()
-    .eq("project_id", projectId)
-    .eq("scored_by", user.id);
+    .eq("project_id", projectId);
 
   if (error) return { error: error.message };
 

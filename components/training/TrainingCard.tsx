@@ -9,9 +9,10 @@ import type { TrainingTender } from "@/lib/types/app.types";
 interface Props {
   tender: TrainingTender | null;
   projectId: string;
+  projectName?: string;
 }
 
-export default function TrainingCard({ tender, projectId }: Props) {
+export default function TrainingCard({ tender, projectId, projectName }: Props) {
   const router = useRouter();
   const [scoring, setScoring] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
@@ -54,11 +55,21 @@ export default function TrainingCard({ tender, projectId }: Props) {
             <h2 className="font-semibold leading-snug">{tender.title}</h2>
             <p className="text-sm text-muted-foreground mt-1">{tender.buyer_name}</p>
           </div>
-          {tender.budget_amount && (
-            <span className="shrink-0 text-sm font-medium text-muted-foreground">
-              {formatBudget(tender.budget_amount)}
-            </span>
-          )}
+          <div className="flex items-center gap-3 shrink-0">
+            {tender.budget_amount && (
+              <span className="text-sm font-medium text-muted-foreground">
+                {formatBudget(tender.budget_amount)}
+              </span>
+            )}
+            <a
+              href={tender.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary underline underline-offset-4 hover:text-primary/80 whitespace-nowrap"
+            >
+              Ver licitación oficial ↗
+            </a>
+          </div>
         </div>
 
         <p className="text-sm leading-relaxed text-muted-foreground line-clamp-6">
@@ -68,7 +79,7 @@ export default function TrainingCard({ tender, projectId }: Props) {
 
       {/* Scoring */}
       <div className="border-t bg-muted/30 px-6 py-4">
-        <ScoreButtons onScore={handleScore} disabled={scoring} selected={selected} />
+        <ScoreButtons onScore={handleScore} disabled={scoring} selected={selected} projectName={projectName} />
         {scoring && (
           <p className="text-center text-xs text-muted-foreground mt-3 animate-pulse">
             Guardando puntuación…

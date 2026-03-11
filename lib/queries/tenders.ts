@@ -89,7 +89,7 @@ export async function getNextTrainingTender(
 
   let query = supabase
     .from("tenders_raw")
-    .select("id, title, summary, buyer_name, budget_amount, published_at")
+    .select("id, title, summary, link, buyer_name, budget_amount, published_at")
     .order("published_at", { ascending: false })
     .limit(1);
 

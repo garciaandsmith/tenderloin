@@ -9,7 +9,7 @@ on:
 
 jobs:
   retrain:
-    name: Retrain tender affinity scoring model
+    name: Retrain per-project relevance scoring models
     runs-on: ubuntu-latest
 
     steps:
@@ -27,7 +27,7 @@ jobs:
           pip install --upgrade pip
           if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
 
-      - name: Train and publish model
+      - name: Train one model per active project and publish
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

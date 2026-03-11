@@ -1,23 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { resetTrainingScores } from "@/app/(app)/projects/[projectId]/training/actions";
 
 interface Props {
   projectId: string;
 }
 
 export default function ResetTrainingButton({ projectId }: Props) {
-  const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleReset() {
     setResetting(true);
-    await fetch(`/api/projects/${projectId}/scores`, { method: "DELETE" });
+    setError(null);
+    const result = await resetTrainingScores(projectId);
     setResetting(false);
+    if (result.error) {
+      setError(result.error);
+      setConfirming(false);
+      return;
+    }
     setConfirming(false);
-    router.refresh();
   }
 
   if (confirming) {
@@ -42,11 +47,14 @@ export default function ResetTrainingButton({ projectId }: Props) {
   }
 
   return (
-    <button
-      onClick={() => setConfirming(true)}
-      className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
-    >
-      Reiniciar entrenamiento
-    </button>
+    <div className="flex flex-col items-center gap-1">
+      <button
+        onClick={() => { setError(null); setConfirming(true); }}
+        className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+      >
+        Reiniciar entrenamiento
+      </button>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
   );
 }

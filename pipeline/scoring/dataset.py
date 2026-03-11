@@ -17,6 +17,9 @@ def load_dataset(
     Sources:
     1. Historical CSV (``csv_path``): columns ``Objeto`` → text, ``Score`` → score.
     2. Supabase ``tender_scores`` joined with ``tenders_raw`` (if credentials provided).
+       Only scores from each project's current ``training_session`` are included,
+       so that a score reset (which increments the session counter) is immediately
+       reflected in the next training run without having to delete any rows.
 
     Rows with score == 0 are excluded because score 0 means "manual review needed"
     (ambiguous label, per scoring rubric).
@@ -32,30 +35,40 @@ def load_dataset(
     df_csv = df_csv[df_csv["score"] != 0]
     frames.append(df_csv)
 
-    # --- Supabase human feedback ---
+    # --- Supabase human feedback (current session only) ---
     if supabase_url and supabase_key:
         try:
             from supabase import create_client
 
             client = create_client(supabase_url, supabase_key)
-            response = (
-                client.table("tender_scores")
-                .select("score, tenders_raw(title, summary)")
-                .neq("score", 0)
-                .execute()
-            )
-            rows = response.data or []
-            if rows:
-                records = []
-                for row in rows:
+
+            # Fetch each project's current training session.
+            projects_resp = client.table("projects").select("id, training_session").execute()
+            projects = projects_resp.data or []
+
+            records = []
+            for proj in projects:
+                project_id = proj["id"]
+                session = proj.get("training_session", 1)
+
+                response = (
+                    client.table("tender_scores")
+                    .select("score, tenders_raw(title, summary)")
+                    .eq("project_id", project_id)
+                    .eq("training_session", session)
+                    .neq("score", 0)
+                    .execute()
+                )
+                for row in (response.data or []):
                     tender = row.get("tenders_raw") or {}
                     title = tender.get("title", "") or ""
                     summary = tender.get("summary", "") or ""
                     text = f"{title}. {summary}".strip(". ")
                     if text:
                         records.append({"text": text, "score": float(row["score"])})
-                if records:
-                    frames.append(pd.DataFrame(records))
+
+            if records:
+                frames.append(pd.DataFrame(records))
         except Exception as exc:  # noqa: BLE001
             import logging
             logging.getLogger(__name__).warning("Could not load Supabase scores: %s", exc)

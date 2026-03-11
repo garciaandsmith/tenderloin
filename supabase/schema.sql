@@ -40,13 +40,14 @@ create trigger on_auth_user_created
 -- PROJECTS
 -- ─────────────────────────────────────────────────────────────
 create table public.projects (
-  id          uuid primary key default gen_random_uuid(),
-  name        text not null,
-  description text,
-  created_by  uuid not null references public.profiles(id),
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now(),
-  is_active   boolean not null default true
+  id                uuid primary key default gen_random_uuid(),
+  name              text not null,
+  description       text,
+  created_by        uuid not null references public.profiles(id),
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  is_active         boolean not null default true,
+  training_session  integer not null default 1
 );
 
 -- ─────────────────────────────────────────────────────────────
@@ -124,13 +125,14 @@ create table public.pipeline_state (
 -- TENDER_SCORES (human labels from the Training section)
 -- ─────────────────────────────────────────────────────────────
 create table public.tender_scores (
-  id          bigserial primary key,
-  tender_id   bigint not null references public.tenders_raw(id) on delete cascade,
-  project_id  uuid not null references public.projects(id) on delete cascade,
-  scored_by   uuid not null references public.profiles(id),
-  score       smallint not null check (score between 0 and 5),
-  scored_at   timestamptz not null default now(),
-  unique (tender_id, project_id, scored_by)
+  id                bigserial primary key,
+  tender_id         bigint not null references public.tenders_raw(id) on delete cascade,
+  project_id        uuid not null references public.projects(id) on delete cascade,
+  scored_by         uuid not null references public.profiles(id),
+  score             smallint not null check (score between 0 and 5),
+  scored_at         timestamptz not null default now(),
+  training_session  integer not null default 1,
+  unique (tender_id, project_id, scored_by, training_session)
 );
 
 -- ─────────────────────────────────────────────────────────────
@@ -234,6 +236,10 @@ create policy "projects_update_admin" on public.projects
 
 create policy "projects_delete_admin" on public.projects
   for delete using (is_admin());
+
+create policy "projects_update_training_session_member" on public.projects
+  for update using (is_project_member(id))
+  with check (is_project_member(id));
 
 -- ── PROJECT_MEMBERS ──────────────────────────────────────────
 create policy "members_select" on public.project_members

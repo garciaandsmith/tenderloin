@@ -17,6 +17,17 @@ function applyHardFilters(query: any, filters: ProjectFilters | null): any {
   return query;
 }
 
+/** Fetch the current training session number for a project. */
+async function getTrainingSession(projectId: string): Promise<number> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("projects")
+    .select("training_session")
+    .eq("id", projectId)
+    .single();
+  return data?.training_session ?? 1;
+}
+
 /** Fetch tenders matching the project's hard filters with a future deadline.
  *  Ordered by published_at desc (model scores are populated by the offline pipeline). */
 export async function getInboxTenders(projectId: string): Promise<InboxTender[]> {
@@ -71,19 +82,23 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
 
 /** Fetch the next unscored tender for the training queue.
  *  Returns tenders matching the project's hard filters that have NOT yet been
- *  scored by this user. */
+ *  scored by this user in the current training session. */
 export async function getNextTrainingTender(
   projectId: string,
   userId: string
 ): Promise<TrainingTender | null> {
   const supabase = await createClient();
-  const filters = await getProjectFilters(projectId);
+  const [filters, trainingSession] = await Promise.all([
+    getProjectFilters(projectId),
+    getTrainingSession(projectId),
+  ]);
 
   const { data: scoredRows } = await supabase
     .from("tender_scores")
     .select("tender_id")
     .eq("project_id", projectId)
-    .eq("scored_by", userId);
+    .eq("scored_by", userId)
+    .eq("training_session", trainingSession);
 
   const scoredIds = (scoredRows ?? []).map((r) => r.tender_id);
 
@@ -106,16 +121,18 @@ export async function getNextTrainingTender(
   return data[0] as TrainingTender;
 }
 
-/** Fetch the score distribution (count per score 0-5) for a project and user.
- *  Scoped to the current user so the chart reflects their personal training progress. */
+/** Fetch the score distribution (count per score 0-5) for a project and user,
+ *  scoped to the current training session. */
 export async function getScoreDistribution(projectId: string, userId: string): Promise<ScoreDistribution[]> {
   const supabase = await createClient();
+  const trainingSession = await getTrainingSession(projectId);
 
   const { data, error } = await supabase
     .from("tender_scores")
     .select("*")
     .eq("project_id", projectId)
-    .eq("scored_by", userId);
+    .eq("scored_by", userId)
+    .eq("training_session", trainingSession);
 
   if (error) throw error;
 
@@ -130,15 +147,17 @@ export async function getScoreDistribution(projectId: string, userId: string): P
   }));
 }
 
-/** Count total tenders scored by the current user in a project. */
+/** Count total tenders scored by the current user in the current training session. */
 export async function getScoredCount(projectId: string, userId: string): Promise<number> {
   const supabase = await createClient();
+  const trainingSession = await getTrainingSession(projectId);
 
   const { count, error } = await supabase
     .from("tender_scores")
     .select("*", { count: "exact", head: true })
     .eq("project_id", projectId)
-    .eq("scored_by", userId);
+    .eq("scored_by", userId)
+    .eq("training_session", trainingSession);
 
   if (error) throw error;
   return count ?? 0;
@@ -185,19 +204,21 @@ export async function getNextTestTender(
   };
 }
 
-/** Fetch all scored tenders for a project+user including tender metadata.
+/** Fetch all scored tenders for a project+user in the current training session.
  *  Used in the Historial tab to browse scores by CPV and other filters. */
 export async function getScoredTenders(
   projectId: string,
   userId: string
 ): Promise<ScoredTenderEntry[]> {
   const supabase = await createClient();
+  const trainingSession = await getTrainingSession(projectId);
 
   const { data, error } = await supabase
     .from("tender_scores")
     .select("tender_id, score, scored_at, tenders_raw ( title, cpv, region )")
     .eq("project_id", projectId)
     .eq("scored_by", userId)
+    .eq("training_session", trainingSession)
     .order("scored_at", { ascending: false });
 
   if (error) throw error;

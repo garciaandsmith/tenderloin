@@ -1,70 +1,50 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import ScoreButtons from "./ScoreButtons";
 import ScoreBadge from "@/components/inbox/ScoreBadge";
 import { formatBudget } from "@/lib/utils/formatters";
-import type { TrainingTender } from "@/lib/types/app.types";
+import type { TestTender } from "@/lib/types/app.types";
 
 interface Props {
-  tender: TrainingTender | null;
+  tender: TestTender | null;
   projectId: string;
   projectName?: string;
 }
 
 export default function TryMeMode({ tender, projectId, projectName }: Props) {
+  const pathname = usePathname();
   const router = useRouter();
   const [userScore, setUserScore] = useState<number | null>(null);
-  const [modelScore, setModelScore] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   if (!tender) {
     return (
       <div className="rounded-lg border bg-card p-8 text-center">
-        <p className="text-2xl mb-3">🤔</p>
-        <p className="font-semibold">No hay licitaciones sin puntuar disponibles.</p>
+        <p className="text-2xl mb-3">🤖</p>
+        <p className="font-semibold">El modelo aún no ha generado predicciones para este proyecto.</p>
         <p className="text-sm text-muted-foreground mt-2">
-          Primero entrena el modelo en el modo <strong>Entrenar</strong>.
+          Puntúa licitaciones en modo <strong>Entrenar</strong> para que el modelo pueda aprender.
+          Las predicciones se generan automáticamente tras el siguiente ciclo de reentrenamiento.
         </p>
       </div>
     );
   }
 
-  async function handleGuess(score: number) {
+  function handleGuess(score: number) {
     setUserScore(score);
-    setLoading(true);
-
-    // Fetch the model score for this tender (if available)
-    const res = await fetch(`/api/tenders/${tender!.id}/model-score?project_id=${projectId}`);
-    if (res.ok) {
-      const data = await res.json();
-      setModelScore(data.model_score ?? null);
-    } else {
-      // Model hasn't scored this tender yet — show null
-      setModelScore(null);
-    }
-
-    // Also save the user's score as a training label
-    await fetch(`/api/tenders/${tender!.id}/score`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_id: projectId, score }),
-    });
-
     setSubmitted(true);
-    setLoading(false);
+    // Intentionally NOT saving to tender_scores — this is a read-only test.
   }
 
   function handleNext() {
-    setUserScore(null);
-    setModelScore(null);
-    setSubmitted(false);
-    router.refresh();
+    // Navigate with the current tender's id as ?skip= so the server picks a different one.
+    router.push(`${pathname}?skip=${tender!.id}`);
   }
 
-  const diff = userScore !== null && modelScore !== null ? Math.abs(userScore - modelScore) : null;
+  const diff =
+    userScore !== null ? Math.abs(userScore - tender.model_score) : null;
 
   return (
     <div className="rounded-lg border bg-card overflow-hidden">
@@ -72,7 +52,7 @@ export default function TryMeMode({ tender, projectId, projectName }: Props) {
       <div className="p-6 space-y-4">
         <div className="flex items-start gap-3">
           <div className="bg-primary text-primary-foreground rounded px-2 py-0.5 text-xs font-bold shrink-0">
-            🎯 TRY ME
+            🎯 TEST THE TRAINING
           </div>
           <div className="ml-auto flex items-center gap-3">
             {tender.budget_amount && (
@@ -96,6 +76,25 @@ export default function TryMeMode({ tender, projectId, projectName }: Props) {
           <p className="text-sm text-muted-foreground mt-1">{tender.buyer_name}</p>
         </div>
 
+        {/* Filter metadata tags */}
+        <div className="flex flex-wrap gap-1.5">
+          {tender.cpv && (
+            <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-mono bg-muted text-muted-foreground">
+              CPV {tender.cpv}
+            </span>
+          )}
+          {tender.region && (
+            <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
+              {tender.region}
+            </span>
+          )}
+          {tender.contract_type && (
+            <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground capitalize">
+              {tender.contract_type}
+            </span>
+          )}
+        </div>
+
         <p className="text-sm leading-relaxed text-muted-foreground line-clamp-6">
           {tender.summary}
         </p>
@@ -108,12 +107,7 @@ export default function TryMeMode({ tender, projectId, projectName }: Props) {
             <p className="text-sm font-medium text-center mb-3">
               ¿Qué puntuación le darías? El modelo revelará su predicción al enviar.
             </p>
-            <ScoreButtons onScore={handleGuess} disabled={loading} projectName={projectName} />
-            {loading && (
-              <p className="text-center text-xs text-muted-foreground mt-3 animate-pulse">
-                Consultando predicción del modelo…
-              </p>
-            )}
+            <ScoreButtons onScore={handleGuess} disabled={false} projectName={projectName} />
           </div>
         ) : (
           <div className="space-y-4">
@@ -125,11 +119,7 @@ export default function TryMeMode({ tender, projectId, projectName }: Props) {
               <div className="text-2xl text-muted-foreground">vs</div>
               <div className="text-center">
                 <p className="text-xs text-muted-foreground mb-1">Predicción del modelo</p>
-                {modelScore !== null ? (
-                  <ScoreBadge score={modelScore} className="text-base px-4 py-1" />
-                ) : (
-                  <span className="text-xs text-muted-foreground">Sin modelo entrenado aún</span>
-                )}
+                <ScoreBadge score={tender.model_score} className="text-base px-4 py-1" />
               </div>
             </div>
 
@@ -137,11 +127,13 @@ export default function TryMeMode({ tender, projectId, projectName }: Props) {
               <p className="text-center text-sm">
                 {diff === 0
                   ? "🎯 ¡Coincidencia perfecta!"
-                  : diff === 1
-                  ? "✅ Muy cerca (diferencia de 1 punto)"
-                  : diff === 2
+                  : diff <= 0.5
+                  ? "✅ Muy cerca"
+                  : diff <= 1.5
+                  ? "✅ Cerca (diferencia de 1 punto)"
+                  : diff <= 2.5
                   ? "⚠️ Diferencia de 2 puntos — el modelo puede mejorar"
-                  : `❌ Diferencia de ${diff} puntos — el modelo necesita más entrenamiento`}
+                  : `❌ Diferencia de ${diff.toFixed(1)} puntos — el modelo necesita más entrenamiento`}
               </p>
             )}
 

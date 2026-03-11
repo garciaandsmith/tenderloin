@@ -26,6 +26,25 @@ export interface TrainingTender {
   buyer_name: string;
   budget_amount: number | null;
   published_at: string;
+  cpv: string | null;
+  region: string | null;
+  contract_type: string | null;
+  procedure_type: string | null;
+}
+
+/** Tender with a confirmed model prediction — used in TEST THE TRAINING mode. */
+export interface TestTender extends TrainingTender {
+  model_score: number;
+}
+
+/** Scored tender entry for the Historial tab. */
+export interface ScoredTenderEntry {
+  tender_id: number;
+  score: number;
+  scored_at: string;
+  title: string;
+  cpv: string | null;
+  region: string | null;
 }
 
 /** Score distribution entry for the training chart. */

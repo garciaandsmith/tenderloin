@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProjectFilters } from "@/lib/queries/projects";
-import type { InboxTender, ScoreDistribution, TrainingTender, ProjectFilters } from "@/lib/types/app.types";
+import type { InboxTender, ScoreDistribution, ScoredTenderEntry, TestTender, TrainingTender, ProjectFilters } from "@/lib/types/app.types";
 
 /** Apply project hard-filters directly to a tenders_raw query builder.
  *  Eliminates the dependency on tender_filter_results (which is populated by the
@@ -89,7 +89,7 @@ export async function getNextTrainingTender(
 
   let query = supabase
     .from("tenders_raw")
-    .select("id, title, summary, link, buyer_name, budget_amount, published_at")
+    .select("id, title, summary, link, buyer_name, budget_amount, published_at, cpv, region, contract_type, procedure_type")
     .order("published_at", { ascending: false })
     .limit(1);
 
@@ -142,4 +142,75 @@ export async function getScoredCount(projectId: string, userId: string): Promise
 
   if (error) throw error;
   return count ?? 0;
+}
+
+/** Fetch a tender that has a model prediction for TEST THE TRAINING mode.
+ *  Returns null when the model has not yet scored any tenders for this project.
+ *  Accepts an optional skipId to avoid showing the same tender twice in a row. */
+export async function getNextTestTender(
+  projectId: string,
+  skipId?: number
+): Promise<TestTender | null> {
+  const supabase = await createClient();
+
+  // 1. Fetch tender IDs that the model has already scored for this project.
+  //    Order by scored_at desc so we prefer recently-scored tenders.
+  const { data: modelScoreRows, error: msError } = await supabase
+    .from("tender_model_scores")
+    .select("tender_id, model_score")
+    .eq("project_id", projectId)
+    .order("scored_at", { ascending: false })
+    .limit(100);
+
+  if (msError) throw msError;
+  if (!modelScoreRows || modelScoreRows.length === 0) return null;
+
+  // 2. Pick the first model-scored tender that is not the one we're skipping.
+  const candidate = modelScoreRows.find((r) => r.tender_id !== skipId);
+  if (!candidate) return null;
+
+  // 3. Fetch the full tender row.
+  const { data: tenderRows, error: tError } = await supabase
+    .from("tenders_raw")
+    .select("id, title, summary, link, buyer_name, budget_amount, published_at, cpv, region, contract_type, procedure_type")
+    .eq("id", candidate.tender_id)
+    .limit(1);
+
+  if (tError) throw tError;
+  if (!tenderRows || tenderRows.length === 0) return null;
+
+  return {
+    ...(tenderRows[0] as TrainingTender),
+    model_score: candidate.model_score as number,
+  };
+}
+
+/** Fetch all scored tenders for a project+user including tender metadata.
+ *  Used in the Historial tab to browse scores by CPV and other filters. */
+export async function getScoredTenders(
+  projectId: string,
+  userId: string
+): Promise<ScoredTenderEntry[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("tender_scores")
+    .select("tender_id, score, scored_at, tenders_raw ( title, cpv, region )")
+    .eq("project_id", projectId)
+    .eq("scored_by", userId)
+    .order("scored_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => {
+    const t = Array.isArray(row.tenders_raw) ? row.tenders_raw[0] : row.tenders_raw;
+    return {
+      tender_id: row.tender_id,
+      score: row.score,
+      scored_at: row.scored_at,
+      title: t?.title ?? "(sin título)",
+      cpv: t?.cpv ?? null,
+      region: t?.region ?? null,
+    } as ScoredTenderEntry;
+  });
 }

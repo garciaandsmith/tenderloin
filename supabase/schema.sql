@@ -265,8 +265,14 @@ create policy "tender_scores_select" on public.tender_scores
 create policy "tender_scores_insert" on public.tender_scores
   for insert with check (is_project_member(project_id) and scored_by = auth.uid());
 
-create policy "tender_scores_delete" on public.tender_scores
-  for delete using (scored_by = auth.uid());
+create policy "tender_scores_delete_project_member" on public.tender_scores
+  for delete using (
+    exists (
+      select 1 from project_members
+      where project_members.project_id = tender_scores.project_id
+        and project_members.user_id = auth.uid()
+    )
+  );
 
 -- ── TENDER_MODEL_SCORES ──────────────────────────────────────
 create policy "model_scores_select" on public.tender_model_scores

@@ -11,6 +11,8 @@ jobs:
   capture:
     name: Capture tenders from PLACSP
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Check out repository

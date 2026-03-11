@@ -4,10 +4,12 @@ import {
   getScoreDistribution,
   getScoredCount,
 } from "@/lib/queries/tenders";
+import { getProject } from "@/lib/queries/projects";
 import TrainingCard from "@/components/training/TrainingCard";
 import TrainingCounter from "@/components/training/TrainingCounter";
 import ScoreDistributionChart from "@/components/training/ScoreDistributionChart";
 import TryMeMode from "@/components/training/TryMeMode";
+import ResetTrainingButton from "@/components/training/ResetTrainingButton";
 
 export const metadata = { title: "Entrenamiento — Tenderloin" };
 export const dynamic = "force-dynamic";
@@ -26,11 +28,14 @@ export default async function TrainingPage({ params, searchParams }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [nextTender, distribution, scoredCount] = await Promise.all([
+  const [nextTender, distribution, scoredCount, project] = await Promise.all([
     getNextTrainingTender(projectId, user!.id),
     getScoreDistribution(projectId),
     getScoredCount(projectId),
+    getProject(projectId),
   ]);
+
+  const projectName = project?.name ?? undefined;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -65,14 +70,21 @@ export default async function TrainingPage({ params, searchParams }: Props) {
         </div>
       </div>
 
-      <TrainingCounter count={scoredCount} />
-      <ScoreDistributionChart data={distribution} />
+      {/* Counter + chart side by side to avoid scrolling */}
+      <div className="grid grid-cols-2 gap-4 items-start">
+        <TrainingCounter count={scoredCount} />
+        <ScoreDistributionChart data={distribution} />
+      </div>
 
       {mode === "tryme" ? (
-        <TryMeMode tender={nextTender} projectId={projectId} />
+        <TryMeMode tender={nextTender} projectId={projectId} projectName={projectName} />
       ) : (
-        <TrainingCard tender={nextTender} projectId={projectId} />
+        <TrainingCard tender={nextTender} projectId={projectId} projectName={projectName} />
       )}
+
+      <div className="flex justify-center pb-4">
+        <ResetTrainingButton projectId={projectId} />
+      </div>
     </div>
   );
 }

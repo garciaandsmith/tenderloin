@@ -22,6 +22,7 @@ export interface TrainingTender {
   id: number;
   title: string;
   summary: string;
+  link: string;
   buyer_name: string;
   budget_amount: number | null;
   published_at: string;

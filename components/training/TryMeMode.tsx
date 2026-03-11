@@ -10,9 +10,10 @@ import type { TrainingTender } from "@/lib/types/app.types";
 interface Props {
   tender: TrainingTender | null;
   projectId: string;
+  projectName?: string;
 }
 
-export default function TryMeMode({ tender, projectId }: Props) {
+export default function TryMeMode({ tender, projectId, projectName }: Props) {
   const router = useRouter();
   const [userScore, setUserScore] = useState<number | null>(null);
   const [modelScore, setModelScore] = useState<number | null>(null);
@@ -73,11 +74,21 @@ export default function TryMeMode({ tender, projectId }: Props) {
           <div className="bg-primary text-primary-foreground rounded px-2 py-0.5 text-xs font-bold shrink-0">
             🎯 TRY ME
           </div>
-          {tender.budget_amount && (
-            <span className="text-sm font-medium text-muted-foreground ml-auto">
-              {formatBudget(tender.budget_amount)}
-            </span>
-          )}
+          <div className="ml-auto flex items-center gap-3">
+            {tender.budget_amount && (
+              <span className="text-sm font-medium text-muted-foreground">
+                {formatBudget(tender.budget_amount)}
+              </span>
+            )}
+            <a
+              href={tender.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary underline underline-offset-4 hover:text-primary/80 whitespace-nowrap"
+            >
+              Ver licitación oficial ↗
+            </a>
+          </div>
         </div>
 
         <div>
@@ -97,7 +108,7 @@ export default function TryMeMode({ tender, projectId }: Props) {
             <p className="text-sm font-medium text-center mb-3">
               ¿Qué puntuación le darías? El modelo revelará su predicción al enviar.
             </p>
-            <ScoreButtons onScore={handleGuess} disabled={loading} />
+            <ScoreButtons onScore={handleGuess} disabled={loading} projectName={projectName} />
             {loading && (
               <p className="text-center text-xs text-muted-foreground mt-3 animate-pulse">
                 Consultando predicción del modelo…

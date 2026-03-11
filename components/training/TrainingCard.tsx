@@ -72,6 +72,30 @@ export default function TrainingCard({ tender, projectId, projectName }: Props) 
           </div>
         </div>
 
+        {/* Filter metadata tags */}
+        <div className="flex flex-wrap gap-1.5">
+          {tender.cpv && (
+            <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-mono bg-muted text-muted-foreground">
+              CPV {tender.cpv}
+            </span>
+          )}
+          {tender.region && (
+            <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
+              {tender.region}
+            </span>
+          )}
+          {tender.contract_type && (
+            <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground capitalize">
+              {tender.contract_type}
+            </span>
+          )}
+          {tender.procedure_type && (
+            <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground capitalize">
+              {tender.procedure_type}
+            </span>
+          )}
+        </div>
+
         <p className="text-sm leading-relaxed text-muted-foreground line-clamp-6">
           {tender.summary}
         </p>

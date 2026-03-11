@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import ScoreButtons from "./ScoreButtons";
 import ScoreBadge from "@/components/inbox/ScoreBadge";
 import { formatBudget } from "@/lib/utils/formatters";
+import { cpvLabel } from "@/lib/utils/cpv";
 import type { TestTender } from "@/lib/types/app.types";
 
 interface Props {
@@ -79,8 +80,8 @@ export default function TryMeMode({ tender, projectId, projectName }: Props) {
         {/* Filter metadata tags */}
         <div className="flex flex-wrap gap-1.5">
           {tender.cpv && (
-            <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-mono bg-muted text-muted-foreground">
-              CPV {tender.cpv}
+            <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
+              {cpvLabel(tender.cpv)}
             </span>
           )}
           {tender.region && (

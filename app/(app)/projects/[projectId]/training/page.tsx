@@ -26,8 +26,13 @@ export default async function TrainingPage({ params, searchParams }: Props) {
   const { projectId } = await params;
   const { mode, skip } = await searchParams;
 
-  // Normalise mode: treat legacy "tryme" as "test"
-  const activeMode = mode === "tryme" || mode === "test" ? "test" : mode === "history" ? "history" : "train";
+  // Normalise mode; treat legacy "tryme" as "test"
+  const activeMode =
+    mode === "tryme" || mode === "test"
+      ? "test"
+      : mode === "history"
+      ? "history"
+      : "train";
 
   const supabase = await createClient();
   const {
@@ -35,28 +40,32 @@ export default async function TrainingPage({ params, searchParams }: Props) {
   } = await supabase.auth.getUser();
 
   const skipId = skip ? Number(skip) : undefined;
+  const project = await getProject(projectId);
+  const projectName = project?.name ?? undefined;
 
-  const [distribution, scoredCount, project] = await Promise.all([
-    getScoreDistribution(projectId, user!.id),
-    getScoredCount(projectId, user!.id),
-    getProject(projectId),
-  ]);
-
-  // Mode-specific fetches — only run what the current tab needs.
-  const nextTender =
-    activeMode === "train" ? await getNextTrainingTender(projectId, user!.id) : null;
+  // Fetch only what the active tab needs
+  const [nextTender, scoredCount] =
+    activeMode === "train"
+      ? await Promise.all([
+          getNextTrainingTender(projectId, user!.id),
+          getScoredCount(projectId, user!.id),
+        ])
+      : [null, 0];
 
   const testTender =
     activeMode === "test" ? await getNextTestTender(projectId, skipId) : null;
 
-  const scoredTenders =
-    activeMode === "history" ? await getScoredTenders(projectId, user!.id) : null;
-
-  const projectName = project?.name ?? undefined;
+  const [distribution, scoredTenders] =
+    activeMode === "history"
+      ? await Promise.all([
+          getScoreDistribution(projectId, user!.id),
+          getScoredTenders(projectId, user!.id),
+        ])
+      : [null, null];
 
   const tabs = [
     { id: "train", label: "Entrenar", href: `/projects/${projectId}/training` },
-    { id: "test", label: "🎯 TEST THE TRAINING", href: `/projects/${projectId}/training?mode=test` },
+    { id: "test", label: "Test", href: `/projects/${projectId}/training?mode=test` },
     { id: "history", label: "Historial", href: `/projects/${projectId}/training?mode=history` },
   ];
 
@@ -86,32 +95,28 @@ export default async function TrainingPage({ params, searchParams }: Props) {
         </div>
       </div>
 
-      {/* Counter + chart — shown in train and test modes */}
-      {activeMode !== "history" && (
-        <div className="grid grid-cols-2 gap-4 items-start">
-          <TrainingCounter count={scoredCount} />
-          <ScoreDistributionChart data={distribution} />
-        </div>
-      )}
-
-      {/* Mode content */}
+      {/* ENTRENAR: counter + card + reset only */}
       {activeMode === "train" && (
-        <TrainingCard tender={nextTender} projectId={projectId} projectName={projectName} />
+        <>
+          <TrainingCounter count={scoredCount} />
+          <TrainingCard tender={nextTender} projectId={projectId} projectName={projectName} />
+          <div className="flex justify-center pb-4">
+            <ResetTrainingButton projectId={projectId} />
+          </div>
+        </>
       )}
 
+      {/* HISTORIAL: chart + CPV breakdown + recent list */}
+      {activeMode === "history" && distribution !== null && scoredTenders !== null && (
+        <>
+          <ScoreDistributionChart data={distribution} />
+          <ScoreHistoryByCpv tenders={scoredTenders} />
+        </>
+      )}
+
+      {/* TEST: model prediction comparison */}
       {activeMode === "test" && (
         <TryMeMode tender={testTender} projectId={projectId} projectName={projectName} />
-      )}
-
-      {activeMode === "history" && scoredTenders !== null && (
-        <ScoreHistoryByCpv tenders={scoredTenders} />
-      )}
-
-      {/* Reset button — only in train mode */}
-      {activeMode === "train" && (
-        <div className="flex justify-center pb-4">
-          <ResetTrainingButton projectId={projectId} />
-        </div>
       )}
     </div>
   );

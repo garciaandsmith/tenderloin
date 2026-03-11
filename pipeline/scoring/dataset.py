@@ -79,4 +79,6 @@ def load_dataset(
     result = pd.concat(frames, ignore_index=True)
     result["score"] = result["score"].astype(float)
     result["text"] = result["text"].astype(str)
+    if result.empty:
+        raise ValueError("No training data found after filtering. Check the CSV path and Supabase credentials.")
     return result

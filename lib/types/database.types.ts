@@ -54,6 +54,7 @@ export interface Database {
           created_at: string;
           updated_at: string;
           is_active: boolean;
+          training_session: number;
         };
         Insert: {
           id?: string;
@@ -63,12 +64,14 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
           is_active?: boolean;
+          training_session?: number;
         };
         Update: {
           name?: string;
           description?: string | null;
           is_active?: boolean;
           updated_at?: string;
+          training_session?: number;
         };
         Relationships: [];
       };
@@ -226,6 +229,7 @@ export interface Database {
           scored_by: string;
           score: number;
           scored_at: string;
+          training_session: number;
         };
         Insert: {
           id?: number;
@@ -234,9 +238,11 @@ export interface Database {
           scored_by: string;
           score: number;
           scored_at?: string;
+          training_session?: number;
         };
         Update: {
           score?: number;
+          training_session?: number;
         };
         Relationships: [];
       };

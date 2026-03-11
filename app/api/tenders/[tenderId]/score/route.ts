@@ -22,6 +22,15 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: "score must be 0–5" }, { status: 400 });
   }
 
+  // Fetch the project's current training session so this score is attached to it.
+  const { data: project } = await supabase
+    .from("projects")
+    .select("training_session")
+    .eq("id", project_id)
+    .single();
+
+  const training_session = project?.training_session ?? 1;
+
   const { data, error } = await supabase
     .from("tender_scores")
     .upsert(
@@ -31,8 +40,9 @@ export async function POST(request: Request, { params }: Params) {
         scored_by: user.id,
         score: Math.round(score),
         scored_at: new Date().toISOString(),
+        training_session,
       },
-      { onConflict: "tender_id,project_id,scored_by" }
+      { onConflict: "tender_id,project_id,scored_by,training_session" }
     )
     .select()
     .single();

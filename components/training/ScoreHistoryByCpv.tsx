@@ -1,3 +1,4 @@
+import { cpvLabel } from "@/lib/utils/cpv";
 import type { ScoredTenderEntry } from "@/lib/types/app.types";
 
 interface Props {
@@ -87,7 +88,7 @@ export default function ScoreHistoryByCpv({ tenders }: Props) {
             <tbody>
               {cpvRows.map((row) => (
                 <tr key={row.cpv} className="border-b last:border-0 hover:bg-muted/20">
-                  <td className="px-4 py-2 font-mono text-xs">{row.cpv}</td>
+                  <td className="px-4 py-2 text-xs">{cpvLabel(row.cpv)}</td>
                   <td className="text-right px-3 py-2 tabular-nums">{row.count}</td>
                   <td className="text-right px-3 py-2 tabular-nums">{row.avg.toFixed(1)}</td>
                   {row.dist.map((n, i) => (
@@ -115,7 +116,7 @@ export default function ScoreHistoryByCpv({ tenders }: Props) {
                 <p className="text-sm truncate">{t.title}</p>
                 <div className="flex gap-2 mt-0.5">
                   {t.cpv && (
-                    <span className="text-xs font-mono text-muted-foreground">{t.cpv}</span>
+                    <span className="text-xs text-muted-foreground">{cpvLabel(t.cpv)}</span>
                   )}
                   {t.region && (
                     <span className="text-xs text-muted-foreground">{t.region}</span>

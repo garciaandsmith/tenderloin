@@ -30,8 +30,8 @@ export default async function TrainingPage({ params, searchParams }: Props) {
 
   const [nextTender, distribution, scoredCount, project] = await Promise.all([
     getNextTrainingTender(projectId, user!.id),
-    getScoreDistribution(projectId),
-    getScoredCount(projectId),
+    getScoreDistribution(projectId, user!.id),
+    getScoredCount(projectId, user!.id),
     getProject(projectId),
   ]);
 

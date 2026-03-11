@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { resetTrainingScores } from "@/app/(app)/projects/[projectId]/training/actions";
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
 
 export default function ResetTrainingButton({ projectId }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const [confirming, setConfirming] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +26,7 @@ export default function ResetTrainingButton({ projectId }: Props) {
       return;
     }
     setConfirming(false);
-    router.refresh();
+    router.push(pathname);
   }
 
   if (confirming) {

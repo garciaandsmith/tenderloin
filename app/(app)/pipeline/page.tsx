@@ -19,14 +19,6 @@ interface Props {
   }>;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  PUB: "Publicada",
-  ADJ: "Adjudicada",
-  FOR: "Formalizada",
-  EV: "En evaluación",
-  AN: "Anulada",
-};
-
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
   services: "Servicios",
   supplies: "Suministros",
@@ -78,7 +70,7 @@ export default async function PipelinePage({ searchParams }: Props) {
   // Build tenders query with search + filters
   let query = supabase
     .from("tenders_raw")
-    .select("id, title, buyer_name, cpv, region, budget_amount, published_at, deadline_at, contract_type, status")
+    .select("id, title, buyer_name, cpv, region, budget_amount, published_at, deadline_at, contract_type, link")
     .gt("deadline_at", now.toISOString())
     .order("published_at", { ascending: false })
     .limit(200);
@@ -206,11 +198,7 @@ export default async function PipelinePage({ searchParams }: Props) {
                           {CONTRACT_TYPE_LABELS[tender.contract_type] ?? tender.contract_type}
                         </span>
                       )}
-                      {tender.status && (
-                        <span className="shrink-0 text-[10px] bg-blue-50 text-blue-700 rounded px-1.5 py-0.5">
-                          {STATUS_LABELS[tender.status] ?? tender.status}
-                        </span>
-                      )}
+
                     </div>
                   </div>
 

@@ -1,6 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Project, ProjectFilters } from "@/lib/types/app.types";
 
+/** Fetch all projects (including inactive) — admin only. */
+export async function getAllProjects(): Promise<Project[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 /** Fetch all projects visible to the current user. */
 export async function getUserProjects(): Promise<Project[]> {
   const supabase = await createClient();

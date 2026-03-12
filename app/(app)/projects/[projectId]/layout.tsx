@@ -14,9 +14,9 @@ export default async function ProjectLayout({ children, params }: Props) {
   if (!project) notFound();
 
   const tabs = [
-    { href: `/projects/${projectId}/inbox`, label: "Bandeja de entrada" },
+    { href: `/projects/${projectId}/inbox`, label: "Inbox" },
     { href: `/projects/${projectId}/training`, label: "Entrenamiento" },
-    { href: `/projects/${projectId}/settings`, label: "Configuración" },
+    { href: `/projects/${projectId}/configuration`, label: "Configuración" },
   ];
 
   return (

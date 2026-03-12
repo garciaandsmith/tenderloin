@@ -9,7 +9,7 @@ on:
 
 jobs:
   capture:
-    name: Capture tenders from PLACSP
+    name: Capture → Filter → Score
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -27,17 +27,24 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install supabase
-          # Install project dependencies if requirements.txt exists
           if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
 
-      - name: Run capture
+      # ── Step 1: Capture ────────────────────────────────────────────────────
+      - name: Capture tenders from PLACSP
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m pipeline.run_capture
 
-      - name: Download scoring model (or train on first run)
+      # ── Step 2: Filter ─────────────────────────────────────────────────────
+      - name: Apply per-project hard filters
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m pipeline.run_filter
+
+      # ── Step 3: Score ──────────────────────────────────────────────────────
+      - name: Download per-project scoring models
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -46,16 +53,15 @@ jobs:
           mkdir -p models
           gh release download scoring-model-latest \
             --repo ${{ github.repository }} \
-            --pattern "scoring_v*.pkl" \
-            --dir models/ 2>/dev/null \
-          || (echo "No model release found — training from scratch…" \
-              && python -m pipeline.run_train --publish)
+            --pattern "scoring_*_v????????.pkl" \
+            --dir models/ \
+            --clobber 2>/dev/null \
+          || echo "No model release found — scoring will be skipped for projects without a model. Run the retrain workflow to create initial models."
 
-      - name: Score tenders (all active projects)
+      - name: Score filter-passing tenders (per project)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python -m pipeline.run_score
 
       - name: Notify on failure

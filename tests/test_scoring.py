@@ -1,4 +1,4 @@
-"""Unit tests for the scoring pipeline (train, dataset, model_io).
+"""Unit tests for the scoring pipeline (train, dataset, model_io, filtering).
 
 These tests do NOT require Supabase credentials or a GPU — sentence-transformers
 is mocked so the suite runs quickly in CI without heavy dependencies.
@@ -14,9 +14,85 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 
+_PROJECT_ID = "proj-abc-123"
+_PROJECT_ID_2 = "proj-xyz-456"
 
-class TestLoadDataset(unittest.TestCase):
-    """Tests for pipeline.scoring.dataset.load_dataset."""
+
+class TestLoadDatasetForProject(unittest.TestCase):
+    """Tests for pipeline.scoring.dataset.load_dataset_for_project."""
+
+    def _write_csv(self, tmp_dir: str, rows: list[dict]) -> Path:
+        df = pd.DataFrame(rows)
+        path = Path(tmp_dir) / "historico.csv"
+        df.to_csv(path, index=False)
+        return path
+
+    def test_loads_text_and_score_from_csv(self) -> None:
+        from pipeline.scoring.dataset import load_dataset_for_project
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv = self._write_csv(tmp, [
+                {"Objeto": "Servicio de comunicación digital", "Score": 4},
+                {"Objeto": "Suministro de equipos informáticos", "Score": 1},
+            ])
+            df = load_dataset_for_project(_PROJECT_ID, csv)
+
+        self.assertIn("text", df.columns)
+        self.assertIn("score", df.columns)
+        self.assertEqual(len(df), 2)
+
+    def test_excludes_score_zero_rows(self) -> None:
+        """Score 0 means 'manual review needed' and must be excluded from training."""
+        from pipeline.scoring.dataset import load_dataset_for_project
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv = self._write_csv(tmp, [
+                {"Objeto": "Texto A", "Score": 0},
+                {"Objeto": "Texto B", "Score": 3},
+            ])
+            df = load_dataset_for_project(_PROJECT_ID, csv)
+
+        self.assertEqual(len(df), 1)
+        self.assertEqual(df.iloc[0]["score"], 3.0)
+
+    def test_excludes_rows_with_missing_score(self) -> None:
+        from pipeline.scoring.dataset import load_dataset_for_project
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv = self._write_csv(tmp, [
+                {"Objeto": "Texto A", "Score": None},
+                {"Objeto": "Texto B", "Score": 5},
+            ])
+            df = load_dataset_for_project(_PROJECT_ID, csv)
+
+        self.assertEqual(len(df), 1)
+
+    def test_score_column_is_float(self) -> None:
+        from pipeline.scoring.dataset import load_dataset_for_project
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv = self._write_csv(tmp, [
+                {"Objeto": "Servicio de marketing", "Score": "4"},
+            ])
+            df = load_dataset_for_project(_PROJECT_ID, csv)
+
+        self.assertEqual(df["score"].dtype, float)
+
+    def test_raises_when_no_data(self) -> None:
+        from pipeline.scoring.dataset import load_dataset_for_project
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # CSV with only score-0 rows -> empty after filtering
+            csv = self._write_csv(tmp, [
+                {"Objeto": "A", "Score": 0},
+            ])
+            with self.assertRaises(ValueError):
+                load_dataset_for_project(_PROJECT_ID, csv)
+
+
+# Keep legacy load_dataset tests so existing CSV-only tooling is not broken.
+class TestLoadDatasetLegacy(unittest.TestCase):
+    """Tests for the legacy pipeline.scoring.dataset.load_dataset function."""
 
     def _write_csv(self, tmp_dir: str, rows: list[dict]) -> Path:
         df = pd.DataFrame(rows)
@@ -39,12 +115,11 @@ class TestLoadDataset(unittest.TestCase):
         self.assertEqual(len(df), 2)
 
     def test_excludes_score_zero_rows(self) -> None:
-        """Score 0 means 'manual review needed' and must be excluded from training."""
         from pipeline.scoring.dataset import load_dataset
 
         with tempfile.TemporaryDirectory() as tmp:
             csv = self._write_csv(tmp, [
-                {"Objeto": "Texto A", "Score": 0},  # ambiguous — must be excluded
+                {"Objeto": "Texto A", "Score": 0},
                 {"Objeto": "Texto B", "Score": 3},
             ])
             df = load_dataset(csv)
@@ -52,49 +127,23 @@ class TestLoadDataset(unittest.TestCase):
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]["score"], 3.0)
 
-    def test_excludes_rows_with_missing_score(self) -> None:
-        from pipeline.scoring.dataset import load_dataset
-
-        with tempfile.TemporaryDirectory() as tmp:
-            csv = self._write_csv(tmp, [
-                {"Objeto": "Texto A", "Score": None},
-                {"Objeto": "Texto B", "Score": 5},
-            ])
-            df = load_dataset(csv)
-
-        self.assertEqual(len(df), 1)
-
-    def test_score_column_is_float(self) -> None:
-        from pipeline.scoring.dataset import load_dataset
-
-        with tempfile.TemporaryDirectory() as tmp:
-            csv = self._write_csv(tmp, [
-                {"Objeto": "Servicio de marketing", "Score": "4"},
-            ])
-            df = load_dataset(csv)
-
-        self.assertEqual(df["score"].dtype, float)
-
     def test_raises_when_no_data(self) -> None:
         from pipeline.scoring.dataset import load_dataset
 
         with tempfile.TemporaryDirectory() as tmp:
-            # CSV with only score-0 rows → empty after filtering
-            csv = self._write_csv(tmp, [
-                {"Objeto": "A", "Score": 0},
-            ])
+            csv = self._write_csv(tmp, [{"Objeto": "A", "Score": 0}])
             with self.assertRaises(ValueError):
                 load_dataset(csv)
 
 
 class TestModelIO(unittest.TestCase):
-    """Tests for pipeline.scoring.model_io save/load round-trip."""
+    """Tests for pipeline.scoring.model_io save/load round-trip (per-project)."""
 
     def _make_artifact(self, version: str = "20260101") -> dict:
         from sklearn.linear_model import Ridge
 
         reg = Ridge()
-        reg.fit([[0], [1]], [1.0, 5.0])  # tiny fit to make it serialisable
+        reg.fit([[0], [1]], [1.0, 5.0])
         return {
             "embedder_name": "paraphrase-multilingual-MiniLM-L12-v2",
             "regressor": reg,
@@ -102,41 +151,52 @@ class TestModelIO(unittest.TestCase):
             "mae": 0.5,
         }
 
-    def test_save_creates_versioned_pkl(self) -> None:
+    def test_save_creates_project_versioned_pkl(self) -> None:
         from pipeline.scoring.model_io import save_model
 
         with tempfile.TemporaryDirectory() as tmp:
             artifact = self._make_artifact("20260311")
-            path = save_model(artifact, Path(tmp))
+            path = save_model(artifact, Path(tmp), _PROJECT_ID)
             self.assertTrue(path.exists())
-            self.assertEqual(path.name, "scoring_v20260311.pkl")
+            self.assertEqual(path.name, f"scoring_{_PROJECT_ID}_v20260311.pkl")
 
     def test_load_latest_returns_most_recent_version(self) -> None:
         from pipeline.scoring.model_io import save_model, load_latest_model
 
         with tempfile.TemporaryDirectory() as tmp:
             models_dir = Path(tmp)
-            save_model(self._make_artifact("20260101"), models_dir)
-            save_model(self._make_artifact("20260201"), models_dir)
-            save_model(self._make_artifact("20260311"), models_dir)
+            save_model(self._make_artifact("20260101"), models_dir, _PROJECT_ID)
+            save_model(self._make_artifact("20260201"), models_dir, _PROJECT_ID)
+            save_model(self._make_artifact("20260311"), models_dir, _PROJECT_ID)
 
-            loaded = load_latest_model(models_dir)
+            loaded = load_latest_model(models_dir, _PROJECT_ID)
             self.assertEqual(loaded["version"], "20260311")
 
-    def test_load_raises_when_no_model(self) -> None:
+    def test_load_raises_when_no_model_for_project(self) -> None:
+        from pipeline.scoring.model_io import save_model, load_latest_model
+
+        with tempfile.TemporaryDirectory() as tmp:
+            models_dir = Path(tmp)
+            # Save a model for a different project only
+            save_model(self._make_artifact("20260311"), models_dir, _PROJECT_ID_2)
+
+            with self.assertRaises(FileNotFoundError):
+                load_latest_model(models_dir, _PROJECT_ID)
+
+    def test_load_raises_when_no_model_at_all(self) -> None:
         from pipeline.scoring.model_io import load_latest_model
 
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(FileNotFoundError):
-                load_latest_model(Path(tmp))
+                load_latest_model(Path(tmp), _PROJECT_ID)
 
     def test_roundtrip_preserves_artifact_keys(self) -> None:
         from pipeline.scoring.model_io import save_model, load_latest_model
 
         with tempfile.TemporaryDirectory() as tmp:
             original = self._make_artifact("20260311")
-            save_model(original, Path(tmp))
-            loaded = load_latest_model(Path(tmp))
+            save_model(original, Path(tmp), _PROJECT_ID)
+            loaded = load_latest_model(Path(tmp), _PROJECT_ID)
 
         self.assertEqual(loaded["version"], original["version"])
         self.assertEqual(loaded["embedder_name"], original["embedder_name"])
@@ -151,11 +211,40 @@ class TestModelIO(unittest.TestCase):
             X_test = [[0.5]]
             expected = original["regressor"].predict(X_test)[0]
 
-            save_model(original, Path(tmp))
-            loaded = load_latest_model(Path(tmp))
+            save_model(original, Path(tmp), _PROJECT_ID)
+            loaded = load_latest_model(Path(tmp), _PROJECT_ID)
             result = loaded["regressor"].predict(X_test)[0]
 
         self.assertAlmostEqual(result, expected, places=6)
+
+    def test_two_projects_do_not_share_models(self) -> None:
+        """Each project's load_latest_model only sees its own artifacts."""
+        from pipeline.scoring.model_io import save_model, load_latest_model
+
+        with tempfile.TemporaryDirectory() as tmp:
+            models_dir = Path(tmp)
+            save_model(self._make_artifact("20260101"), models_dir, _PROJECT_ID)
+            save_model(self._make_artifact("20260311"), models_dir, _PROJECT_ID_2)
+
+            loaded_1 = load_latest_model(models_dir, _PROJECT_ID)
+            loaded_2 = load_latest_model(models_dir, _PROJECT_ID_2)
+
+        self.assertEqual(loaded_1["version"], "20260101")
+        self.assertEqual(loaded_2["version"], "20260311")
+
+    def test_list_project_ids_with_models(self) -> None:
+        from pipeline.scoring.model_io import save_model, list_project_ids_with_models
+
+        with tempfile.TemporaryDirectory() as tmp:
+            models_dir = Path(tmp)
+            save_model(self._make_artifact("20260101"), models_dir, _PROJECT_ID)
+            save_model(self._make_artifact("20260311"), models_dir, _PROJECT_ID_2)
+
+            ids = list_project_ids_with_models(models_dir)
+
+        self.assertIn(_PROJECT_ID, ids)
+        self.assertIn(_PROJECT_ID_2, ids)
+        self.assertEqual(len(ids), 2)
 
 
 class TestTrain(unittest.TestCase):
@@ -167,12 +256,6 @@ class TestTrain(unittest.TestCase):
         return pd.DataFrame({"text": texts, "score": scores})
 
     def _train_with_mock(self, df: pd.DataFrame | None = None):
-        """Helper: run train() with a mocked SentenceTransformer.
-
-        sentence_transformers may not be installed in the test environment, so
-        we inject a fake module into sys.modules so the lazy import inside
-        train() resolves to our mock without needing the real package.
-        """
         import sys
         from pipeline.scoring.train import train
 
@@ -226,11 +309,6 @@ class TestScoreClamping(unittest.TestCase):
     """Verify that the score clamping logic in score.py produces [1.0, 5.0] output."""
 
     def test_raw_scores_clamped_to_valid_range(self) -> None:
-        """score_unscored_tenders clamps raw predictions to [1.0, 5.0].
-
-        Score 0 is reserved for 'manual review needed' and must never be emitted
-        by the model. This test verifies the clamping inline logic is correct.
-        """
         raw_predictions = [-1.5, 0.0, 0.5, 1.0, 3.7, 5.0, 6.8, 100.0]
         clamped = [max(1.0, min(5.0, s)) for s in raw_predictions]
 
@@ -248,6 +326,127 @@ class TestScoreClamping(unittest.TestCase):
 
     def test_clamp_caps_above_5(self) -> None:
         self.assertAlmostEqual(max(1.0, min(5.0, 7.3)), 5.0)
+
+
+class TestFilterEvaluateTender(unittest.TestCase):
+    """Tests for pipeline.filtering.filter._evaluate_tender."""
+
+    def _tender(self, **overrides) -> dict:
+        base = {
+            "id": 1,
+            "title": "Servicio de consultoría digital",
+            "summary": "Proyecto de transformación digital para administración pública",
+            "region": "ES30",
+            "cpv": "72000000",
+            "budget_amount": 50000,
+            "contract_type": "services",
+            "procedure_type": "open",
+            "lot_count": 1,
+            "duration_months": 12,
+            "buyer_type": "local_entity",
+        }
+        base.update(overrides)
+        return base
+
+    def _eval(self, tender: dict, cfg: dict) -> dict:
+        from pipeline.filtering.filter import _evaluate_tender
+        return _evaluate_tender(tender, cfg, "proj-test")
+
+    def test_passes_when_no_filters_configured(self) -> None:
+        result = self._eval(self._tender(), {})
+        self.assertTrue(result["passed"])
+        self.assertFalse(result["discard_reasons"])
+
+    def test_fails_budget_below_min(self) -> None:
+        result = self._eval(self._tender(budget_amount=1000), {"budget_min": 5000})
+        self.assertFalse(result["passed"])
+        self.assertIn("budget_below_min", result["discard_reasons"])
+
+    def test_passes_budget_above_min(self) -> None:
+        result = self._eval(self._tender(budget_amount=10000), {"budget_min": 5000})
+        self.assertTrue(result["passed"])
+
+    def test_fails_budget_above_max(self) -> None:
+        result = self._eval(self._tender(budget_amount=200000), {"budget_max": 100000})
+        self.assertFalse(result["passed"])
+        self.assertIn("budget_above_max", result["discard_reasons"])
+
+    def test_fails_region_mismatch(self) -> None:
+        result = self._eval(self._tender(region="ES51"), {"regions": ["ES30", "ES70"]})
+        self.assertFalse(result["passed"])
+        self.assertIn("region_mismatch", result["discard_reasons"])
+
+    def test_passes_region_prefix_match(self) -> None:
+        result = self._eval(self._tender(region="ES300"), {"regions": ["ES30"]})
+        self.assertTrue(result["passed"])
+
+    def test_fails_cpv_mismatch(self) -> None:
+        result = self._eval(self._tender(cpv="45000000"), {"cpv_codes": ["72", "73"]})
+        self.assertFalse(result["passed"])
+        self.assertIn("cpv_mismatch", result["discard_reasons"])
+
+    def test_passes_cpv_prefix_match(self) -> None:
+        result = self._eval(self._tender(cpv="72300000"), {"cpv_codes": ["72"]})
+        self.assertTrue(result["passed"])
+
+    def test_fails_contract_type_mismatch(self) -> None:
+        result = self._eval(self._tender(contract_type="supplies"), {"contract_types": ["services"]})
+        self.assertFalse(result["passed"])
+        self.assertIn("contract_type_mismatch", result["discard_reasons"])
+
+    def test_fails_keyword_include_miss(self) -> None:
+        result = self._eval(
+            self._tender(title="Obras de construcción", summary="Edificio nuevo"),
+            {"keywords_include": ["digital", "tecnología"]},
+        )
+        self.assertFalse(result["passed"])
+        self.assertIn("keyword_include_miss", result["discard_reasons"])
+
+    def test_passes_keyword_include_hit(self) -> None:
+        result = self._eval(
+            self._tender(title="Servicios digitales", summary="Plataforma web"),
+            {"keywords_include": ["digital"]},
+        )
+        self.assertTrue(result["passed"])
+
+    def test_fails_keyword_exclude_hit(self) -> None:
+        result = self._eval(
+            self._tender(title="Obras de construcción", summary="Edificio nuevo"),
+            {"keywords_exclude": ["construcción"]},
+        )
+        self.assertFalse(result["passed"])
+        self.assertIn("keyword_exclude_hit", result["discard_reasons"])
+
+    def test_fails_lot_count_exceeded(self) -> None:
+        result = self._eval(self._tender(lot_count=10), {"max_lot_count": 3})
+        self.assertFalse(result["passed"])
+        self.assertIn("lot_count_exceeded", result["discard_reasons"])
+
+    def test_fails_duration_below_min(self) -> None:
+        result = self._eval(self._tender(duration_months=3), {"min_contract_months": 6})
+        self.assertFalse(result["passed"])
+        self.assertIn("duration_below_min", result["discard_reasons"])
+
+    def test_fails_duration_above_max(self) -> None:
+        result = self._eval(self._tender(duration_months=48), {"max_contract_months": 24})
+        self.assertFalse(result["passed"])
+        self.assertIn("duration_above_max", result["discard_reasons"])
+
+    def test_multiple_reasons_accumulated(self) -> None:
+        result = self._eval(
+            self._tender(budget_amount=100, region="ES51"),
+            {"budget_min": 5000, "regions": ["ES30"]},
+        )
+        self.assertFalse(result["passed"])
+        self.assertIn("budget_below_min", result["discard_reasons"])
+        self.assertIn("region_mismatch", result["discard_reasons"])
+
+    def test_result_has_required_keys(self) -> None:
+        result = self._eval(self._tender(), {})
+        self.assertIn("tender_id", result)
+        self.assertIn("project_id", result)
+        self.assertIn("passed", result)
+        self.assertIn("discard_reasons", result)
 
 
 if __name__ == "__main__":

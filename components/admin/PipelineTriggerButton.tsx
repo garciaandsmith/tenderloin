@@ -4,7 +4,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Play } from "lucide-react";
 
-export default function PipelineTriggerButton() {
+interface Props {
+  disabled?: boolean;
+}
+
+export default function PipelineTriggerButton({ disabled: disabledProp }: Props) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<"idle" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -33,9 +37,9 @@ export default function PipelineTriggerButton() {
 
   return (
     <div className="flex items-center gap-3">
-      <Button onClick={trigger} disabled={loading} className="gap-2">
+      <Button onClick={trigger} disabled={loading || disabledProp} className="gap-2">
         <Play className="h-4 w-4" />
-        {loading ? "Disparando…" : "Ejecutar captura ahora"}
+        {loading ? "Disparando…" : disabledProp ? "Captura completada hoy" : "Ejecutar captura ahora"}
       </Button>
       {result === "success" && (
         <span className="text-sm text-green-600">

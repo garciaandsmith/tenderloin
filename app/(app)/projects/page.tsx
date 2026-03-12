@@ -18,7 +18,7 @@ export default async function ProjectsPage() {
     .eq("id", user!.id)
     .single();
 
-  if (profile?.role !== "admin") redirect("/dashboard");
+  if (profile?.role !== "admin") redirect("/pipeline");
 
   const projects = await getUserProjects();
 
@@ -71,7 +71,7 @@ export default async function ProjectsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      href={`/projects/${p.id}/settings`}
+                      href={`/projects/${p.id}/configuration`}
                       className="text-primary underline underline-offset-4 text-xs"
                     >
                       Configurar

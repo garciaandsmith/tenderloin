@@ -33,7 +33,7 @@ export default function ProjectCreateForm() {
     }
 
     const project = await res.json();
-    router.push(`/projects/${project.id}/settings`);
+    router.push(`/projects/${project.id}/configuration`);
     router.refresh();
   }
 

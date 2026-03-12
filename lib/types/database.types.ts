@@ -157,6 +157,7 @@ export interface Database {
           cpv: string;
           budget_amount: number | null;
           source: string;
+          status: string | null;
           created_at: string;
           contract_type: string | null;
           procedure_type: string | null;
@@ -177,6 +178,7 @@ export interface Database {
           cpv: string;
           budget_amount?: number | null;
           source?: string;
+          status?: string | null;
           created_at?: string;
           contract_type?: string | null;
           procedure_type?: string | null;
@@ -196,6 +198,7 @@ export interface Database {
           cpv?: string;
           budget_amount?: number | null;
           source?: string;
+          status?: string | null;
           contract_type?: string | null;
           procedure_type?: string | null;
           lot_count?: number | null;

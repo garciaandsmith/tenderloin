@@ -45,7 +45,7 @@ export default function LoginForm() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push("/pipeline");
     router.refresh();
   }
 

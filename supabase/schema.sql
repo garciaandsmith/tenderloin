@@ -97,6 +97,7 @@ create table public.tenders_raw (
   cpv             text not null,
   budget_amount   numeric,
   source          text not null default 'placsp',
+  status          text,                            -- e.g. 'PUB','ADJ','FOR','EV','AN'
   created_at      timestamptz not null default now(),
   -- extended fields for later pipeline stages
   contract_type   text,

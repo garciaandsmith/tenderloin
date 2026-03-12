@@ -36,7 +36,9 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
 
   let query = supabase
     .from("tenders_raw")
-    .select("*, tender_model_scores ( model_score, project_id, model_version )")
+    .select(
+      "*, tender_model_scores ( model_score, project_id, model_version ), tender_analysis!left ( status, project_id )"
+    )
     .gt("deadline_at", new Date().toISOString())
     .order("published_at", { ascending: false });
 
@@ -59,13 +61,25 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
           b.model_version.localeCompare(a.model_version)
       )[0];
 
-    const { tender_model_scores: _tms, ...tender } = row as Record<string, unknown>;
+    // Find analysis status for this specific project
+    const analyses = Array.isArray(row.tender_analysis)
+      ? row.tender_analysis
+      : row.tender_analysis
+      ? [row.tender_analysis]
+      : [];
+    const projectAnalysis = analyses.find(
+      (a: { project_id: string }) => a.project_id === projectId
+    );
+
+    const { tender_model_scores: _tms, tender_analysis: _ta, ...tender } = row as Record<string, unknown>;
     void _tms;
+    void _ta;
 
     return {
       ...(tender as Parameters<typeof Object.assign>[0]),
       model_score: projectModelScore?.model_score ?? null,
       human_score_avg: null,
+      analysis_status: projectAnalysis?.status ?? null,
     } as InboxTender;
   });
 

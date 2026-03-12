@@ -4,11 +4,11 @@ export interface CpvEntry {
   category: string;
 }
 
-/** CPV (Common Procurement Vocabulary) codes relevant to García & Smith.
- *  Source: config/codigos_cpv.txt
+/** CPV (Common Procurement Vocabulary) codes for public procurement filtering.
+ *  Covers a broad range of sectors to support any type of project.
  */
 export const AGENCY_CPV_CODES: CpvEntry[] = [
-  // Marketing & Comunicación
+  // ── Marketing & Comunicación ──────────────────────────────────────────────
   { code: "79310000", label: "Servicios de estudios de mercado", category: "Marketing & Comunicación" },
   { code: "79311000", label: "Servicios de encuestas", category: "Marketing & Comunicación" },
   { code: "79311100", label: "Servicios de diseño de encuestas", category: "Marketing & Comunicación" },
@@ -37,7 +37,7 @@ export const AGENCY_CPV_CODES: CpvEntry[] = [
   { code: "79416100", label: "Servicios de gestión de relaciones públicas", category: "Marketing & Comunicación" },
   { code: "79416200", label: "Consultoría en relaciones públicas", category: "Marketing & Comunicación" },
 
-  // Consultoría & Gestión
+  // ── Consultoría & Gestión ─────────────────────────────────────────────────
   { code: "79400000", label: "Servicios de consultoría empresarial y de gestión", category: "Consultoría & Gestión" },
   { code: "79410000", label: "Servicios de consultoría empresarial y de gestión", category: "Consultoría & Gestión" },
   { code: "79411000", label: "Servicios de consultoría en gestión general", category: "Consultoría & Gestión" },
@@ -56,9 +56,9 @@ export const AGENCY_CPV_CODES: CpvEntry[] = [
   { code: "79430000", label: "Servicios de gestión de crisis", category: "Consultoría & Gestión" },
   { code: "79998000", label: "Servicios de coaching", category: "Consultoría & Gestión" },
 
-  // Digital & Tecnología
+  // ── Digital & Tecnología (servicios) ──────────────────────────────────────
   { code: "72200000", label: "Servicios de programación y consultoría informática", category: "Digital & Tecnología" },
-  { code: "72210000", label: "Servicios de programación de productos de software empaquetado", category: "Digital & Tecnología" },
+  { code: "72210000", label: "Servicios de programación de software empaquetado", category: "Digital & Tecnología" },
   { code: "72212000", label: "Servicios de programación de software de aplicación", category: "Digital & Tecnología" },
   { code: "72212224", label: "Servicios de desarrollo de software de páginas web", category: "Digital & Tecnología" },
   { code: "72220000", label: "Servicios de consultoría en sistemas e informática", category: "Digital & Tecnología" },
@@ -78,17 +78,15 @@ export const AGENCY_CPV_CODES: CpvEntry[] = [
   { code: "72321000", label: "Servicios de bases de datos de valor añadido", category: "Digital & Tecnología" },
   { code: "72322000", label: "Servicios de gestión electrónica de datos", category: "Digital & Tecnología" },
   { code: "72400000", label: "Servicios de Internet", category: "Digital & Tecnología" },
-  { code: "72410000", label: "Servicios de proveedor", category: "Digital & Tecnología" },
+  { code: "72410000", label: "Servicios de proveedor de Internet", category: "Digital & Tecnología" },
   { code: "72411000", label: "Proveedores de servicios de Internet (ISP)", category: "Digital & Tecnología" },
   { code: "72412000", label: "Proveedores de servicios de correo electrónico", category: "Digital & Tecnología" },
   { code: "72413000", label: "Servicios de diseño de sitios web", category: "Digital & Tecnología" },
-  { code: "72414000", label: "Proveedores de software de motor de búsqueda web", category: "Digital & Tecnología" },
   { code: "72415000", label: "Servicios de mantenimiento de software para Internet o Intranet", category: "Digital & Tecnología" },
   { code: "72416000", label: "Proveedores de servicios de aplicaciones", category: "Digital & Tecnología" },
-  { code: "72417000", label: "Nombres de dominio de Internet", category: "Digital & Tecnología" },
   { code: "72420000", label: "Servicios de desarrollo de Internet", category: "Digital & Tecnología" },
-  { code: "72421000", label: "Servicios de desarrollo de aplicaciones cliente para Internet o intranet", category: "Digital & Tecnología" },
-  { code: "72422000", label: "Servicios de desarrollo de aplicaciones servidor para Internet o intranet", category: "Digital & Tecnología" },
+  { code: "72421000", label: "Servicios de desarrollo de aplicaciones cliente para Internet", category: "Digital & Tecnología" },
+  { code: "72422000", label: "Servicios de desarrollo de aplicaciones servidor para Internet", category: "Digital & Tecnología" },
   { code: "72500000", label: "Servicios informáticos", category: "Digital & Tecnología" },
   { code: "72510000", label: "Servicios de gestión informática", category: "Digital & Tecnología" },
   { code: "72511000", label: "Servicios de software de gestión de redes", category: "Digital & Tecnología" },
@@ -98,8 +96,32 @@ export const AGENCY_CPV_CODES: CpvEntry[] = [
   { code: "72521000", label: "Servicios de soporte técnico informático", category: "Digital & Tecnología" },
   { code: "72540000", label: "Servicios de actualización de ordenadores", category: "Digital & Tecnología" },
   { code: "72590000", label: "Servicios informáticos profesionales", category: "Digital & Tecnología" },
+  { code: "72600000", label: "Servicios de soporte y consultoría informática", category: "Digital & Tecnología" },
+  { code: "72700000", label: "Servicios de redes informáticas", category: "Digital & Tecnología" },
+  { code: "72800000", label: "Servicios de auditoría y prueba informática", category: "Digital & Tecnología" },
+  { code: "72900000", label: "Servicios de recuperación y copia de seguridad informática", category: "Digital & Tecnología" },
 
-  // Diseño & Producción Gráfica
+  // ── Hardware y Equipos TI ─────────────────────────────────────────────────
+  { code: "30000000", label: "Máquinas de oficina y ordenadores", category: "Hardware y Equipos TI" },
+  { code: "30200000", label: "Equipo y material informático", category: "Hardware y Equipos TI" },
+  { code: "30210000", label: "Máquinas de procesamiento de datos (hardware)", category: "Hardware y Equipos TI" },
+  { code: "30213000", label: "Ordenadores personales", category: "Hardware y Equipos TI" },
+  { code: "30213100", label: "Ordenadores portátiles", category: "Hardware y Equipos TI" },
+  { code: "30230000", label: "Equipo informático", category: "Hardware y Equipos TI" },
+  { code: "30232100", label: "Impresoras y trazadores", category: "Hardware y Equipos TI" },
+  { code: "32000000", label: "Equipos de radio, televisión y comunicaciones", category: "Hardware y Equipos TI" },
+  { code: "32250000", label: "Teléfonos móviles", category: "Hardware y Equipos TI" },
+  { code: "32400000", label: "Redes", category: "Hardware y Equipos TI" },
+  { code: "32420000", label: "Equipo de red", category: "Hardware y Equipos TI" },
+  { code: "32500000", label: "Material y equipo de telecomunicaciones", category: "Hardware y Equipos TI" },
+  { code: "48000000", label: "Paquetes de software y sistemas informáticos", category: "Hardware y Equipos TI" },
+  { code: "48100000", label: "Software específico para sectores industriales", category: "Hardware y Equipos TI" },
+  { code: "48200000", label: "Software de redes, de Internet y de intranets", category: "Hardware y Equipos TI" },
+  { code: "48400000", label: "Software para transacciones comerciales y personales", category: "Hardware y Equipos TI" },
+  { code: "48600000", label: "Software de bases de datos y de gestión", category: "Hardware y Equipos TI" },
+  { code: "48800000", label: "Sistemas informáticos y servidores", category: "Hardware y Equipos TI" },
+
+  // ── Diseño & Producción Gráfica ────────────────────────────────────────────
   { code: "22100000", label: "Libros impresos, folletos y hojas sueltas", category: "Diseño & Producción" },
   { code: "22110000", label: "Libros impresos", category: "Diseño & Producción" },
   { code: "22140000", label: "Hojas sueltas", category: "Diseño & Producción" },
@@ -121,19 +143,16 @@ export const AGENCY_CPV_CODES: CpvEntry[] = [
   { code: "79821000", label: "Servicios de acabado de impresión", category: "Diseño & Producción" },
   { code: "79821100", label: "Servicios de corrección de pruebas", category: "Diseño & Producción" },
   { code: "79822000", label: "Servicios de composición", category: "Diseño & Producción" },
-  { code: "79822100", label: "Servicios de composición tipográfica", category: "Diseño & Producción" },
   { code: "79822200", label: "Servicios de grabado", category: "Diseño & Producción" },
   { code: "79822300", label: "Servicios de serigrafía", category: "Diseño & Producción" },
-  { code: "79822400", label: "Servicios de litografía", category: "Diseño & Producción" },
   { code: "79822500", label: "Servicios de diseño gráfico", category: "Diseño & Producción" },
   { code: "79823000", label: "Servicios de impresión y entrega", category: "Diseño & Producción" },
-  { code: "79824000", label: "Servicios de impresión y distribución", category: "Diseño & Producción" },
   { code: "79930000", label: "Servicios especializados de diseño", category: "Diseño & Producción" },
   { code: "79931000", label: "Servicios de decoración de interiores", category: "Diseño & Producción" },
   { code: "79932000", label: "Servicios de diseño de interiores", category: "Diseño & Producción" },
   { code: "79933000", label: "Servicios de apoyo al diseño", category: "Diseño & Producción" },
 
-  // Fotografía
+  // ── Fotografía ────────────────────────────────────────────────────────────
   { code: "79960000", label: "Fotografía y servicios conexos", category: "Fotografía" },
   { code: "79961000", label: "Servicios de fotografía", category: "Fotografía" },
   { code: "79961100", label: "Servicios de fotografía publicitaria", category: "Fotografía" },
@@ -142,14 +161,13 @@ export const AGENCY_CPV_CODES: CpvEntry[] = [
   { code: "79962000", label: "Servicios de revelado fotográfico", category: "Fotografía" },
   { code: "79963000", label: "Servicios de restauración, copiado y retoque fotográfico", category: "Fotografía" },
 
-  // Audiovisual & Producción de Contenido
+  // ── Audiovisual & Producción de Contenido ─────────────────────────────────
   { code: "92100000", label: "Servicios de cine y vídeo", category: "Audiovisual & Producción" },
   { code: "92110000", label: "Producción de películas y servicios conexos", category: "Audiovisual & Producción" },
-  { code: "92111000", label: "Servicios de producción de películas publicitarias o de promoción y vídeo", category: "Audiovisual & Producción" },
-  { code: "92111100", label: "Servicios de producción de cine para películas o vídeos de promoción", category: "Audiovisual & Producción" },
+  { code: "92111000", label: "Servicios de producción de películas publicitarias o de promoción", category: "Audiovisual & Producción" },
+  { code: "92111100", label: "Servicios de producción de cine para vídeos de promoción", category: "Audiovisual & Producción" },
   { code: "92111200", label: "Servicios de producción de vídeo para películas publicitarias", category: "Audiovisual & Producción" },
   { code: "92111210", label: "Servicios de producción de vídeo para películas promocionales", category: "Audiovisual & Producción" },
-  { code: "92111220", label: "Servicios de producción de vídeo para películas publicitarias", category: "Audiovisual & Producción" },
   { code: "92111300", label: "Servicios de reproducción de películas publicitarias o de promoción", category: "Audiovisual & Producción" },
   { code: "92112000", label: "Servicios de distribución de películas publicitarias o de promoción", category: "Audiovisual & Producción" },
   { code: "92120000", label: "Servicios de distribución de películas y servicios conexos", category: "Audiovisual & Producción" },
@@ -169,7 +187,7 @@ export const AGENCY_CPV_CODES: CpvEntry[] = [
   { code: "92315000", label: "Servicios de artistas de variedades", category: "Audiovisual & Producción" },
   { code: "92316000", label: "Servicios de espectáculos de luz y sonido", category: "Audiovisual & Producción" },
 
-  // Eventos & Comunicación Institucional
+  // ── Eventos ───────────────────────────────────────────────────────────────
   { code: "79950000", label: "Servicios de organización de exposiciones, ferias y congresos", category: "Eventos" },
   { code: "79951000", label: "Servicios de organización de seminarios", category: "Eventos" },
   { code: "79952000", label: "Servicios de eventos", category: "Eventos" },
@@ -180,9 +198,12 @@ export const AGENCY_CPV_CODES: CpvEntry[] = [
   { code: "79956000", label: "Servicios de organización de ferias y exposiciones", category: "Eventos" },
   { code: "79957000", label: "Servicios de organización de subastas", category: "Eventos" },
 
-  // Formación & Comunicación Interna
+  // ── Formación ─────────────────────────────────────────────────────────────
   { code: "80000000", label: "Servicios de educación y formación", category: "Formación" },
-  { code: "80400000", label: "Servicios de educación de adultos y otros servicios de educación", category: "Formación" },
+  { code: "80100000", label: "Servicios de enseñanza primaria", category: "Formación" },
+  { code: "80200000", label: "Servicios de enseñanza secundaria", category: "Formación" },
+  { code: "80300000", label: "Servicios de enseñanza superior", category: "Formación" },
+  { code: "80400000", label: "Servicios de educación de adultos y otros servicios educativos", category: "Formación" },
   { code: "80410000", label: "Servicios de escuelas de formación variada", category: "Formación" },
   { code: "80500000", label: "Servicios de formación", category: "Formación" },
   { code: "80510000", label: "Servicios de formación especializada", category: "Formación" },
@@ -192,21 +213,256 @@ export const AGENCY_CPV_CODES: CpvEntry[] = [
   { code: "80530000", label: "Servicios de formación profesional", category: "Formación" },
   { code: "80550000", label: "Servicios de formación en seguridad", category: "Formación" },
 
-  // Relaciones con Medios & Comunicación
+  // ── Medios & Comunicación ─────────────────────────────────────────────────
   { code: "92400000", label: "Servicios de agencias de noticias", category: "Medios & Comunicación" },
   { code: "92500000", label: "Servicios de biblioteca, archivo, museo y otros servicios culturales", category: "Medios & Comunicación" },
   { code: "92510000", label: "Servicios de biblioteca y archivo", category: "Medios & Comunicación" },
+
+  // ── Construcción y Obras ──────────────────────────────────────────────────
+  { code: "45000000", label: "Trabajos de construcción", category: "Construcción y Obras" },
+  { code: "45100000", label: "Trabajos de preparación de terrenos", category: "Construcción y Obras" },
+  { code: "45200000", label: "Construcción de edificios e ingeniería civil", category: "Construcción y Obras" },
+  { code: "45210000", label: "Construcción de edificios", category: "Construcción y Obras" },
+  { code: "45220000", label: "Ingeniería civil y estructuras", category: "Construcción y Obras" },
+  { code: "45230000", label: "Construcción de tuberías, líneas y vías", category: "Construcción y Obras" },
+  { code: "45240000", label: "Construcción de obras hidráulicas", category: "Construcción y Obras" },
+  { code: "45260000", label: "Trabajos de cubierta y trabajos especiales de construcción", category: "Construcción y Obras" },
+  { code: "45300000", label: "Instalaciones en edificios", category: "Construcción y Obras" },
+  { code: "45310000", label: "Trabajos de instalación eléctrica", category: "Construcción y Obras" },
+  { code: "45320000", label: "Trabajos de aislamiento", category: "Construcción y Obras" },
+  { code: "45330000", label: "Trabajos de fontanería", category: "Construcción y Obras" },
+  { code: "45340000", label: "Instalación de vallas, barandillas y dispositivos de seguridad", category: "Construcción y Obras" },
+  { code: "45400000", label: "Trabajos de acabado de edificios", category: "Construcción y Obras" },
+  { code: "45410000", label: "Trabajos de revoque", category: "Construcción y Obras" },
+  { code: "45420000", label: "Carpintería y ebanistería", category: "Construcción y Obras" },
+  { code: "45430000", label: "Revestimiento de suelos y paredes", category: "Construcción y Obras" },
+  { code: "45440000", label: "Trabajos de pintura y acristalamiento", category: "Construcción y Obras" },
+  { code: "45450000", label: "Otros trabajos de acabado de edificios", category: "Construcción y Obras" },
+
+  // ── Ingeniería y Arquitectura ─────────────────────────────────────────────
+  { code: "71000000", label: "Servicios de arquitectura, ingeniería y planificación", category: "Ingeniería y Arquitectura" },
+  { code: "71200000", label: "Servicios de arquitectura", category: "Ingeniería y Arquitectura" },
+  { code: "71220000", label: "Servicios de diseño arquitectónico", category: "Ingeniería y Arquitectura" },
+  { code: "71240000", label: "Servicios de arquitectura, ingeniería y planificación urbana", category: "Ingeniería y Arquitectura" },
+  { code: "71300000", label: "Servicios de ingeniería", category: "Ingeniería y Arquitectura" },
+  { code: "71310000", label: "Consultoría técnica e ingeniería", category: "Ingeniería y Arquitectura" },
+  { code: "71320000", label: "Servicios de diseño técnico", category: "Ingeniería y Arquitectura" },
+  { code: "71400000", label: "Servicios de planificación urbana y paisajística", category: "Ingeniería y Arquitectura" },
+  { code: "71500000", label: "Servicios de supervisión de obras de construcción", category: "Ingeniería y Arquitectura" },
+  { code: "71520000", label: "Servicios de supervisión de obras", category: "Ingeniería y Arquitectura" },
+  { code: "71600000", label: "Servicios técnicos de prueba, análisis e inspección", category: "Ingeniería y Arquitectura" },
+  { code: "71700000", label: "Servicios de supervisión y control", category: "Ingeniería y Arquitectura" },
+  { code: "71900000", label: "Servicios técnicos varios", category: "Ingeniería y Arquitectura" },
+
+  // ── Salud y Servicios Sociales ────────────────────────────────────────────
+  { code: "85000000", label: "Servicios de salud y asistencia social", category: "Salud y Servicios Sociales" },
+  { code: "85100000", label: "Servicios de atención médica", category: "Salud y Servicios Sociales" },
+  { code: "85110000", label: "Servicios hospitalarios y conexos", category: "Salud y Servicios Sociales" },
+  { code: "85120000", label: "Servicios de práctica médica", category: "Salud y Servicios Sociales" },
+  { code: "85130000", label: "Servicios odontológicos", category: "Salud y Servicios Sociales" },
+  { code: "85140000", label: "Servicios de atención sanitaria varios", category: "Salud y Servicios Sociales" },
+  { code: "85200000", label: "Servicios veterinarios", category: "Salud y Servicios Sociales" },
+  { code: "85300000", label: "Servicios de bienestar social y conexos", category: "Salud y Servicios Sociales" },
+  { code: "85310000", label: "Servicios de asistencia social", category: "Salud y Servicios Sociales" },
+  { code: "85320000", label: "Servicios sociales", category: "Salud y Servicios Sociales" },
+  { code: "85500000", label: "Servicios de guardería infantil y de preescolar", category: "Salud y Servicios Sociales" },
+
+  // ── Equipo Médico y de Laboratorio ────────────────────────────────────────
+  { code: "33000000", label: "Equipo médico, farmacéutico y de cuidado personal", category: "Equipo Médico y Laboratorio" },
+  { code: "33100000", label: "Equipos médicos", category: "Equipo Médico y Laboratorio" },
+  { code: "33110000", label: "Equipos de obtención de imágenes médicas", category: "Equipo Médico y Laboratorio" },
+  { code: "33140000", label: "Material médico consumible", category: "Equipo Médico y Laboratorio" },
+  { code: "33190000", label: "Dispositivos médicos varios", category: "Equipo Médico y Laboratorio" },
+  { code: "33200000", label: "Equipos terapéuticos", category: "Equipo Médico y Laboratorio" },
+  { code: "38000000", label: "Equipos de laboratorio, óptica y de precisión", category: "Equipo Médico y Laboratorio" },
+
+  // ── Medioambiente y Limpieza ──────────────────────────────────────────────
+  { code: "90000000", label: "Servicios de alcantarillado, limpieza y medioambiente", category: "Medioambiente y Limpieza" },
+  { code: "90400000", label: "Servicios de eliminación de aguas residuales", category: "Medioambiente y Limpieza" },
+  { code: "90500000", label: "Servicios de recogida y tratamiento de residuos", category: "Medioambiente y Limpieza" },
+  { code: "90510000", label: "Eliminación y tratamiento de basura", category: "Medioambiente y Limpieza" },
+  { code: "90600000", label: "Servicios de limpieza y saneamiento en zonas urbanas", category: "Medioambiente y Limpieza" },
+  { code: "90700000", label: "Servicios medioambientales", category: "Medioambiente y Limpieza" },
+  { code: "90710000", label: "Gestión medioambiental", category: "Medioambiente y Limpieza" },
+  { code: "90720000", label: "Protección medioambiental", category: "Medioambiente y Limpieza" },
+  { code: "90900000", label: "Servicios de limpieza y desinfección", category: "Medioambiente y Limpieza" },
+  { code: "90910000", label: "Servicios de limpieza", category: "Medioambiente y Limpieza" },
+  { code: "90911000", label: "Servicios de limpieza de viviendas y edificios", category: "Medioambiente y Limpieza" },
+  { code: "90919000", label: "Servicios de limpieza de oficinas, escuelas y equipos", category: "Medioambiente y Limpieza" },
+  { code: "77200000", label: "Servicios silvícolas", category: "Medioambiente y Limpieza" },
+  { code: "77300000", label: "Servicios de horticultura", category: "Medioambiente y Limpieza" },
+  { code: "77310000", label: "Servicios de plantación y mantenimiento de zonas verdes", category: "Medioambiente y Limpieza" },
+
+  // ── Transporte ────────────────────────────────────────────────────────────
+  { code: "60000000", label: "Servicios de transporte", category: "Transporte" },
+  { code: "60100000", label: "Servicios de transporte por carretera", category: "Transporte" },
+  { code: "60112000", label: "Servicios de transporte público de viajeros por carretera", category: "Transporte" },
+  { code: "60120000", label: "Servicios de taxi", category: "Transporte" },
+  { code: "60130000", label: "Servicios especiales de transporte de pasajeros", category: "Transporte" },
+  { code: "60160000", label: "Transporte de correo por carretera", category: "Transporte" },
+  { code: "60170000", label: "Alquiler de vehículos de pasajeros con conductor", category: "Transporte" },
+  { code: "60180000", label: "Alquiler de vehículos de mercancías con conductor", category: "Transporte" },
+  { code: "60200000", label: "Servicios de transporte por ferrocarril", category: "Transporte" },
+  { code: "60400000", label: "Servicios de transporte aéreo", category: "Transporte" },
+  { code: "60600000", label: "Servicios de transporte fluvial", category: "Transporte" },
+  { code: "63500000", label: "Servicios de agencias de viajes y operadores turísticos", category: "Transporte" },
+  { code: "34000000", label: "Equipos de transporte y productos auxiliares", category: "Transporte" },
+  { code: "34100000", label: "Vehículos de motor", category: "Transporte" },
+  { code: "34110000", label: "Turismos", category: "Transporte" },
+  { code: "34130000", label: "Vehículos de motor para transporte de mercancías", category: "Transporte" },
+
+  // ── Energía y Suministros ─────────────────────────────────────────────────
+  { code: "09000000", label: "Productos petrolíferos, combustibles, electricidad", category: "Energía y Suministros" },
+  { code: "09100000", label: "Combustibles", category: "Energía y Suministros" },
+  { code: "09120000", label: "Combustibles gaseosos", category: "Energía y Suministros" },
+  { code: "09130000", label: "Petróleo y destilados del petróleo", category: "Energía y Suministros" },
+  { code: "09310000", label: "Electricidad", category: "Energía y Suministros" },
+  { code: "09320000", label: "Vapor, agua caliente y aire caliente por conexión", category: "Energía y Suministros" },
+  { code: "09330000", label: "Energía solar", category: "Energía y Suministros" },
+  { code: "09340000", label: "Combustibles geotérmicos", category: "Energía y Suministros" },
+  { code: "65100000", label: "Distribución de agua y servicios conexos", category: "Energía y Suministros" },
+  { code: "65200000", label: "Distribución de gas y servicios conexos", category: "Energía y Suministros" },
+  { code: "65300000", label: "Distribución de electricidad", category: "Energía y Suministros" },
+
+  // ── Servicios Financieros ─────────────────────────────────────────────────
+  { code: "66000000", label: "Servicios financieros y de seguros", category: "Servicios Financieros" },
+  { code: "66100000", label: "Servicios bancarios y de inversión", category: "Servicios Financieros" },
+  { code: "66110000", label: "Servicios de banca central", category: "Servicios Financieros" },
+  { code: "66140000", label: "Servicios de gestión de fondos de inversión", category: "Servicios Financieros" },
+  { code: "66150000", label: "Servicios de administración de mercados financieros", category: "Servicios Financieros" },
+  { code: "66170000", label: "Servicios de consultoría financiera", category: "Servicios Financieros" },
+  { code: "66200000", label: "Servicios de seguros", category: "Servicios Financieros" },
+  { code: "66510000", label: "Servicios de seguros de vida", category: "Servicios Financieros" },
+  { code: "66512000", label: "Servicios de seguros de accidentes y enfermedad", category: "Servicios Financieros" },
+  { code: "66513000", label: "Servicios de seguros de responsabilidad civil", category: "Servicios Financieros" },
+
+  // ── Servicios Inmobiliarios ───────────────────────────────────────────────
+  { code: "70000000", label: "Servicios inmobiliarios", category: "Servicios Inmobiliarios" },
+  { code: "70110000", label: "Servicios de desarrollo de bienes inmuebles residenciales", category: "Servicios Inmobiliarios" },
+  { code: "70120000", label: "Compraventa de bienes inmuebles", category: "Servicios Inmobiliarios" },
+  { code: "70130000", label: "Alquiler de bienes inmuebles propios", category: "Servicios Inmobiliarios" },
+  { code: "70200000", label: "Alquiler de bienes inmuebles", category: "Servicios Inmobiliarios" },
+  { code: "70210000", label: "Alquiler de bienes inmuebles residenciales", category: "Servicios Inmobiliarios" },
+  { code: "70220000", label: "Alquiler de bienes inmuebles no residenciales", category: "Servicios Inmobiliarios" },
+  { code: "70300000", label: "Servicios de agencia inmobiliaria", category: "Servicios Inmobiliarios" },
+
+  // ── I+D ───────────────────────────────────────────────────────────────────
+  { code: "73000000", label: "Servicios de investigación y desarrollo (I+D)", category: "I+D" },
+  { code: "73100000", label: "Servicios de investigación", category: "I+D" },
+  { code: "73200000", label: "Consultoría en investigación y desarrollo", category: "I+D" },
+  { code: "73300000", label: "Concepción y ejecución de la investigación y el desarrollo", category: "I+D" },
+  { code: "73420000", label: "Estudios de viabilidad y evaluación tecnológica", category: "I+D" },
+
+  // ── Seguridad y Vigilancia ────────────────────────────────────────────────
+  { code: "79700000", label: "Servicios de investigación y seguridad", category: "Seguridad y Vigilancia" },
+  { code: "79710000", label: "Servicios de vigilancia", category: "Seguridad y Vigilancia" },
+  { code: "79711000", label: "Servicios de supervisión de alarmas", category: "Seguridad y Vigilancia" },
+  { code: "79713000", label: "Servicios de guardia de seguridad", category: "Seguridad y Vigilancia" },
+  { code: "79714000", label: "Servicios de control de accesos", category: "Seguridad y Vigilancia" },
+  { code: "79715000", label: "Servicios de patrullaje", category: "Seguridad y Vigilancia" },
+  { code: "35000000", label: "Equipo de seguridad, extinción de incendios y rescate", category: "Seguridad y Vigilancia" },
+  { code: "35100000", label: "Equipo de emergencia y seguridad", category: "Seguridad y Vigilancia" },
+  { code: "35110000", label: "Equipo de extinción de incendios", category: "Seguridad y Vigilancia" },
+  { code: "35120000", label: "Sistemas y dispositivos de vigilancia y seguridad", category: "Seguridad y Vigilancia" },
+
+  // ── Administración Pública ────────────────────────────────────────────────
+  { code: "75000000", label: "Servicios de administración pública", category: "Administración Pública" },
+  { code: "75100000", label: "Servicios de administración pública general", category: "Administración Pública" },
+  { code: "75110000", label: "Servicios de administración general del estado", category: "Administración Pública" },
+  { code: "75200000", label: "Prestación de servicios a la comunidad", category: "Administración Pública" },
+  { code: "75230000", label: "Servicios en materia de justicia", category: "Administración Pública" },
+  { code: "75240000", label: "Servicios de seguridad pública, ley y orden", category: "Administración Pública" },
+  { code: "75250000", label: "Servicios de bomberos y de rescate", category: "Administración Pública" },
+  { code: "75300000", label: "Servicios de prestaciones obligatorias de la Seguridad Social", category: "Administración Pública" },
+
+  // ── Hostelería y Catering ─────────────────────────────────────────────────
+  { code: "55000000", label: "Servicios de hotel, restaurante y comercio al por menor", category: "Hostelería y Catering" },
+  { code: "55100000", label: "Servicios de hotel", category: "Hostelería y Catering" },
+  { code: "55120000", label: "Servicios de reuniones y conferencias en hoteles", category: "Hostelería y Catering" },
+  { code: "55300000", label: "Servicios de restaurante y suministro de comidas", category: "Hostelería y Catering" },
+  { code: "55310000", label: "Servicios de restaurante", category: "Hostelería y Catering" },
+  { code: "55320000", label: "Servicios de suministro de comidas", category: "Hostelería y Catering" },
+  { code: "55400000", label: "Servicios de suministro de bebidas", category: "Hostelería y Catering" },
+  { code: "55520000", label: "Servicios de catering", category: "Hostelería y Catering" },
+
+  // ── Agricultura y Medioambiente Natural ───────────────────────────────────
+  { code: "03000000", label: "Productos agrícolas, forestales, pesqueros", category: "Agricultura" },
+  { code: "77000000", label: "Servicios agrícolas, forestales, horticultura y afines", category: "Agricultura" },
+  { code: "77100000", label: "Servicios agrícolas", category: "Agricultura" },
+  { code: "77400000", label: "Servicios de zoología", category: "Agricultura" },
+  { code: "77500000", label: "Servicios ganaderos", category: "Agricultura" },
+  { code: "77600000", label: "Servicios de caza", category: "Agricultura" },
+  { code: "77700000", label: "Servicios de pesca", category: "Agricultura" },
+
+  // ── Mobiliario y Equipamiento ─────────────────────────────────────────────
+  { code: "39000000", label: "Mobiliario, equipamiento del hogar y aparatos domésticos", category: "Mobiliario y Equipamiento" },
+  { code: "39100000", label: "Mobiliario", category: "Mobiliario y Equipamiento" },
+  { code: "39110000", label: "Asientos, sillas y productos relacionados", category: "Mobiliario y Equipamiento" },
+  { code: "39120000", label: "Mesas, armarios, escritorios y librerías", category: "Mobiliario y Equipamiento" },
+  { code: "39130000", label: "Mobiliario de oficina", category: "Mobiliario y Equipamiento" },
+  { code: "39160000", label: "Mobiliario escolar", category: "Mobiliario y Equipamiento" },
+  { code: "39300000", label: "Equipos varios", category: "Mobiliario y Equipamiento" },
+  { code: "39700000", label: "Aparatos domésticos", category: "Mobiliario y Equipamiento" },
+
+  // ── Cultura, Deporte y Recreo ─────────────────────────────────────────────
+  { code: "92600000", label: "Servicios deportivos", category: "Cultura, Deporte y Recreo" },
+  { code: "92610000", label: "Servicios de explotación de instalaciones deportivas", category: "Cultura, Deporte y Recreo" },
+  { code: "92620000", label: "Servicios relacionados con el deporte", category: "Cultura, Deporte y Recreo" },
+  { code: "92700000", label: "Servicios de apuestas y loterías", category: "Cultura, Deporte y Recreo" },
 ];
 
 /** Return the human-readable label for a CPV code, or the code itself if not found. */
 export function cpvLabel(code: string): string {
+  if (!code) return "";
   const entry = AGENCY_CPV_CODES.find(
     (c) => c.code === code || code.startsWith(c.code.slice(0, 5))
   );
   return entry ? `${entry.code} — ${entry.label}` : code;
 }
 
-/** Check whether a CPV code matches any of the agency's CPV codes (prefix match). */
+/** Return just the label for a CPV code (without the numeric code prefix). */
+export function cpvLabelOnly(code: string): string {
+  if (!code) return "";
+  const entry = AGENCY_CPV_CODES.find(
+    (c) => c.code === code || code.startsWith(c.code.slice(0, 5))
+  );
+  return entry ? entry.label : code;
+}
+
+/** Check whether a CPV code matches any of the given CPV codes (prefix match). */
 export function matchesCpv(code: string, cpvList: string[]): boolean {
   return cpvList.some((c) => code.startsWith(c));
 }
+
+/** Major CPV categories for pipeline/search filters (2-digit prefix). */
+export const CPV_FILTER_CATEGORIES: Array<{ prefix: string; label: string }> = [
+  { prefix: "03", label: "Agricultura y productos naturales" },
+  { prefix: "09", label: "Combustibles y energía" },
+  { prefix: "22", label: "Publicaciones y material impreso" },
+  { prefix: "30", label: "Equipos informáticos y de oficina" },
+  { prefix: "32", label: "Equipos de telecomunicaciones" },
+  { prefix: "33", label: "Equipo médico y de laboratorio" },
+  { prefix: "34", label: "Vehículos y equipos de transporte" },
+  { prefix: "35", label: "Seguridad y extinción de incendios" },
+  { prefix: "38", label: "Equipos de laboratorio y óptica" },
+  { prefix: "39", label: "Mobiliario y equipamiento" },
+  { prefix: "45", label: "Construcción y obras" },
+  { prefix: "48", label: "Software y sistemas informáticos" },
+  { prefix: "55", label: "Hostelería y catering" },
+  { prefix: "60", label: "Transporte (servicios)" },
+  { prefix: "63", label: "Agencias de viaje y logística" },
+  { prefix: "65", label: "Distribución de agua, gas y electricidad" },
+  { prefix: "66", label: "Servicios financieros y seguros" },
+  { prefix: "70", label: "Servicios inmobiliarios" },
+  { prefix: "71", label: "Arquitectura e ingeniería" },
+  { prefix: "72", label: "Servicios TI e informáticos" },
+  { prefix: "73", label: "Investigación y desarrollo (I+D)" },
+  { prefix: "75", label: "Administración pública" },
+  { prefix: "77", label: "Servicios agrícolas y forestales" },
+  { prefix: "79", label: "Servicios empresariales" },
+  { prefix: "80", label: "Educación y formación" },
+  { prefix: "85", label: "Salud y servicios sociales" },
+  { prefix: "90", label: "Medioambiente, limpieza y residuos" },
+  { prefix: "92", label: "Cultura, deporte y recreo" },
+  { prefix: "98", label: "Otros servicios comunitarios" },
+];

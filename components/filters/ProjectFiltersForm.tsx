@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -116,9 +117,9 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
   ];
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form onSubmit={handleSubmit} className="space-y-4">
       {/* Budget */}
-      <Section title="Presupuesto (€)">
+      <CollapsibleSection title="Presupuesto (€)" defaultOpen>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Mínimo">
             <Input
@@ -139,20 +140,20 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
             />
           </Field>
         </div>
-      </Section>
+      </CollapsibleSection>
 
       {/* Regions */}
-      <Section title="Regiones (códigos NUTS)">
+      <CollapsibleSection title="Regiones (códigos NUTS)" defaultOpen>
         <NutsSelector selected={regions} onChange={setRegions} disabled={readOnly} />
-      </Section>
+      </CollapsibleSection>
 
       {/* CPV codes */}
-      <Section title="Códigos CPV">
+      <CollapsibleSection title="Códigos CPV" defaultOpen>
         <CpvSelector selected={cpvCodes} onChange={setCpvCodes} disabled={readOnly} />
-      </Section>
+      </CollapsibleSection>
 
       {/* Contract types */}
-      <Section title="Tipo de contrato">
+      <CollapsibleSection title="Tipo de contrato" defaultOpen>
         <CheckboxGroup
           items={CONTRACT_TYPES}
           selected={contractTypes}
@@ -160,10 +161,10 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
           idKey="value"
           labelKey="label"
         />
-      </Section>
+      </CollapsibleSection>
 
       {/* Procedure types */}
-      <Section title="Tipo de procedimiento">
+      <CollapsibleSection title="Tipo de procedimiento">
         <CheckboxGroup
           items={PROCEDURE_TYPES}
           selected={procedureTypes}
@@ -171,10 +172,10 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
           idKey="value"
           labelKey="label"
         />
-      </Section>
+      </CollapsibleSection>
 
       {/* Buyer types */}
-      <Section title="Tipo de convocante">
+      <CollapsibleSection title="Tipo de convocante">
         <CheckboxGroup
           items={BUYER_TYPES}
           selected={buyerTypes}
@@ -182,10 +183,13 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
           idKey="value"
           labelKey="label"
         />
-      </Section>
+      </CollapsibleSection>
 
-      {/* Keywords */}
-      <Section title="Palabras clave incluidas (título/resumen debe contener alguna)">
+      {/* Keywords include */}
+      <CollapsibleSection title="Palabras clave incluidas">
+        <p className="text-xs text-muted-foreground mb-2">
+          El título o resumen debe contener alguna de estas palabras.
+        </p>
         <TagInput
           tags={keywordsInclude}
           onRemove={(v) => !readOnly && setKeywordsInclude(keywordsInclude.filter((x) => x !== v))}
@@ -195,9 +199,13 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
           placeholder="Añadir palabra clave…"
           disabled={readOnly}
         />
-      </Section>
+      </CollapsibleSection>
 
-      <Section title="Palabras clave excluidas (título/resumen no debe contener ninguna)">
+      {/* Keywords exclude */}
+      <CollapsibleSection title="Palabras clave excluidas">
+        <p className="text-xs text-muted-foreground mb-2">
+          El título o resumen no debe contener ninguna de estas palabras.
+        </p>
         <TagInput
           tags={keywordsExclude}
           onRemove={(v) => !readOnly && setKeywordsExclude(keywordsExclude.filter((x) => x !== v))}
@@ -207,10 +215,10 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
           placeholder="Añadir palabra excluida…"
           disabled={readOnly}
         />
-      </Section>
+      </CollapsibleSection>
 
       {/* Lots & duration */}
-      <Section title="Lotes y duración">
+      <CollapsibleSection title="Lotes y duración del contrato">
         <div className="grid grid-cols-3 gap-4">
           <Field label="Máx. lotes">
             <Input
@@ -240,7 +248,7 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
             />
           </Field>
         </div>
-      </Section>
+      </CollapsibleSection>
 
       {!readOnly && (
         <div className="flex items-center gap-3 pt-4 border-t">
@@ -255,14 +263,39 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+// ── Collapsible Section ────────────────────────────────────────────────────────
+
+function CollapsibleSection({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
-    <div className="space-y-3">
-      <h3 className="font-medium text-sm">{title}</h3>
-      {children}
+    <div className="border rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-muted/40 hover:bg-muted/60 transition-colors text-left"
+      >
+        <h3 className="text-base font-semibold">{title}</h3>
+        {open ? (
+          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+        )}
+      </button>
+      {open && <div className="px-4 py-4">{children}</div>}
     </div>
   );
 }
+
+// ── Field ──────────────────────────────────────────────────────────────────────
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -272,6 +305,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
+
+// ── CheckboxGroup ──────────────────────────────────────────────────────────────
 
 function CheckboxGroup<T extends Record<string, string>>({
   items,
@@ -310,6 +345,8 @@ function CheckboxGroup<T extends Record<string, string>>({
     </div>
   );
 }
+
+// ── TagInput ───────────────────────────────────────────────────────────────────
 
 function TagInput({
   tags,

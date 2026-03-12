@@ -190,12 +190,11 @@ export default async function PipelinePage({ searchParams }: Props) {
                     <div className="flex items-start gap-2">
                       <p className="font-medium leading-snug line-clamp-2 flex-1">{tender.title}</p>
                       <a
-                        href={`https://contrataciondelsectorpublico.gob.es/wps/portal/plataforma/busqueda/!ut/p/b1/hY1LDoIwFEX_CLSX_h6XyIAxSiIkLEiHiJFgkIIwMZ4_oAvQ3dznBBLIIAX9ij5v6EgHp_h5N5WLYSwrGlSoEFIAzUFUPpNdYkGhCFIogE3JRaLf3hLDoV1hm9tEuYwu1m-cqwkzT-y_f7f/${tender.id}`}
+                        href={tender.link}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="shrink-0 text-muted-foreground hover:text-primary"
                         title="Ver en PLACSP"
-                        onClick={(e) => e.stopPropagation()}
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>

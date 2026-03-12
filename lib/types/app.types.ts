@@ -15,6 +15,7 @@ export type PipelineState = Database["public"]["Tables"]["pipeline_state"]["Row"
 export interface InboxTender extends TenderRaw {
   model_score: number | null;
   human_score_avg: number | null;
+  analysis_status: string | null; // 'pending' | 'running' | 'done' | 'error' | null
 }
 
 /** Tender with metadata for the Training section queue. */

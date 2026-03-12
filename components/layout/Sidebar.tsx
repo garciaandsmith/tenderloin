@@ -3,23 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Layers, FolderOpen, Users } from "lucide-react";
+import { Layers, Users, FolderOpen } from "lucide-react";
 import type { Profile } from "@/lib/types/app.types";
 
 interface Props {
   profile: Pick<Profile, "role" | "email" | "full_name"> | null;
+  projects: Array<{ id: string; name: string }>;
 }
 
-const navItems = [
-  { href: "/pipeline", label: "Pipeline", icon: Layers },
-  { href: "/projects", label: "Proyectos", icon: FolderOpen },
-];
-
-const adminItems = [
-  { href: "/admin/users", label: "Usuarios", icon: Users },
-];
-
-export default function Sidebar({ profile }: Props) {
+export default function Sidebar({ profile, projects }: Props) {
   const pathname = usePathname();
   const isAdmin = profile?.role === "admin";
 
@@ -32,30 +24,47 @@ export default function Sidebar({ profile }: Props) {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-1">
-        {navItems.map((item) => (
-          <SidebarLink
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={<item.icon className="h-4 w-4" />}
-            active={pathname.startsWith(item.href)}
-          />
-        ))}
+        {/* Projects section — visible to all users */}
+        <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Proyectos
+        </p>
 
+        {projects.length === 0 ? (
+          <p className="px-3 py-2 text-xs text-muted-foreground italic">
+            Sin proyectos asignados
+          </p>
+        ) : (
+          projects.map((project) => (
+            <SidebarLink
+              key={project.id}
+              href={`/projects/${project.id}/inbox`}
+              label={project.name}
+              icon={<FolderOpen className="h-4 w-4 shrink-0" />}
+              active={pathname.startsWith(`/projects/${project.id}`)}
+            />
+          ))
+        )}
+
+        {/* Admin section */}
         {isAdmin && (
           <>
-            <p className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-2">
-              Admin
-            </p>
-            {adminItems.map((item) => (
-              <SidebarLink
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                icon={<item.icon className="h-4 w-4" />}
-                active={pathname.startsWith(item.href)}
-              />
-            ))}
+            <div className="pt-3 pb-1">
+              <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Admin
+              </p>
+            </div>
+            <SidebarLink
+              href="/pipeline"
+              label="Pipeline"
+              icon={<Layers className="h-4 w-4" />}
+              active={pathname.startsWith("/pipeline")}
+            />
+            <SidebarLink
+              href="/admin/users"
+              label="Usuarios"
+              icon={<Users className="h-4 w-4" />}
+              active={pathname.startsWith("/admin/users")}
+            />
           </>
         )}
       </nav>
@@ -85,7 +94,7 @@ function SidebarLink({
       )}
     >
       {icon}
-      {label}
+      <span className="truncate">{label}</span>
     </Link>
   );
 }

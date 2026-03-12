@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
-import { getProject, getProjectFilters, getProjectMembers } from "@/lib/queries/projects";
+import { getProject, getProjectMembers } from "@/lib/queries/projects";
 import { notFound } from "next/navigation";
-import ProjectFiltersForm from "@/components/filters/ProjectFiltersForm";
+import ProjectEditForm from "@/components/projects/ProjectEditForm";
 import MemberList from "@/components/projects/MemberList";
 
 export const metadata = { title: "Configuración — Tenderloin" };
@@ -26,9 +26,8 @@ export default async function ProjectConfigurationPage({ params }: Props) {
 
   const isAdmin = profile?.role === "admin";
 
-  const [project, filters, members] = await Promise.all([
+  const [project, members] = await Promise.all([
     getProject(projectId),
-    getProjectFilters(projectId),
     getProjectMembers(projectId),
   ]);
 
@@ -36,28 +35,25 @@ export default async function ProjectConfigurationPage({ params }: Props) {
 
   return (
     <div className="max-w-3xl mx-auto space-y-10">
-      <section>
-        <h2 className="text-lg font-semibold mb-4">Filtros duros</h2>
-        <p className="text-sm text-muted-foreground mb-6">
-          Define los criterios obligatorios que deben cumplir las licitaciones para aparecer en la
-          bandeja de entrada y en el entrenamiento.
-        </p>
-        <ProjectFiltersForm
-          projectId={projectId}
-          initialFilters={filters}
-          readOnly={!isAdmin}
-        />
-      </section>
-
       {isAdmin && (
         <section>
-          <h2 className="text-lg font-semibold mb-4">Usuarios del proyecto</h2>
-          <MemberList
-            projectId={projectId}
-            members={members as Parameters<typeof MemberList>[0]["members"]}
+          <h2 className="text-lg font-semibold mb-4">Información del proyecto</h2>
+          <ProjectEditForm
+            projectId={project.id}
+            initialName={project.name}
+            initialDescription={project.description}
           />
         </section>
       )}
+
+      <section>
+        <h2 className="text-lg font-semibold mb-4">Usuarios con acceso</h2>
+        <MemberList
+          projectId={projectId}
+          members={members as Parameters<typeof MemberList>[0]["members"]}
+          readOnly={!isAdmin}
+        />
+      </section>
     </div>
   );
 }

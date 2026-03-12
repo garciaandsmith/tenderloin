@@ -16,6 +16,7 @@ export default async function ProjectLayout({ children, params }: Props) {
   const tabs = [
     { href: `/projects/${projectId}/inbox`, label: "Inbox" },
     { href: `/projects/${projectId}/training`, label: "Entrenamiento" },
+    { href: `/projects/${projectId}/filtros`, label: "Filtros" },
     { href: `/projects/${projectId}/configuration`, label: "Configuración" },
   ];
 

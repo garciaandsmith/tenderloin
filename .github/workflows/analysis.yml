@@ -1,0 +1,48 @@
+name: Tender Analysis Worker
+
+on:
+  schedule:
+    # Runs every 30 minutes to process pending analyses triggered by users
+    - cron: '*/30 * * * *'
+  # Allow manual trigger from the GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Maximum number of analyses to process per run'
+        required: false
+        default: '10'
+
+jobs:
+  analyze:
+    name: Process pending tender analyses
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
+
+      - name: Process pending analyses
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          LIMIT="${{ github.event.inputs.limit || '10' }}"
+          python -m pipeline.run_analysis --limit "$LIMIT"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Analysis worker failed at $(date -u). Check the Actions log."
+          # Add Slack/email notification here if needed in the future.

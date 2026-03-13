@@ -106,13 +106,13 @@ def _process_one(
         raise ValueError(f"Tender {tender_id} not found in tenders_raw")
 
     # Fetch documents (best-effort; fall back to summary-only analysis)
+    pliego_texts = None
     attached_files: list[dict] = []
-    documents_text = ""
     try:
-        attached_files, documents_text = fetcher.fetch_texts(tender["link"])
+        pliego_texts = fetcher.fetch_texts(tender["link"])
         attached_files = [
             {"name": d["name"], "url": d["url"], "type": d["type"]}
-            for d in attached_files
+            for d in pliego_texts.attached_files
         ]
     except Exception as exc:
         logger.warning(
@@ -125,7 +125,8 @@ def _process_one(
         title=tender["title"],
         summary=tender["summary"],
         link=tender["link"],
-        documents_text=documents_text,
+        ppt_text=pliego_texts.ppt_text if pliego_texts else "",
+        pcap_text=pliego_texts.pcap_text if pliego_texts else "",
     )
 
     # Persist results

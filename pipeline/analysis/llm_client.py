@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 _MODEL = "claude-opus-4-6"
 _MAX_INPUT_CHARS = 15_000  # chars of document text to send to the LLM
-_MAX_TOKENS = 2048
+_MAX_TOKENS = 4096
 
 _SYSTEM_PROMPT = """\
 Eres un asistente especializado en análisis de licitaciones públicas españolas.
@@ -19,10 +19,10 @@ Dado el objeto del contrato y, cuando estén disponibles, los documentos del pli
 extrae la información relevante y devuelve ÚNICAMENTE un objeto JSON válido con estas claves:
 
 {
-  "services_required": "<descripción de los servicios o trabajos a prestar>",
-  "technical_conditions": "<solvencia técnica exigida: certificaciones, experiencia mínima, medios materiales y humanos, etc.>",
-  "administrative_conditions": "<condiciones administrativas: plazos de ejecución, garantías, criterios de adjudicación, composición del equipo mínimo, desglose de presupuesto, etc.>",
-  "key_data_summary": "<datos clave: presupuesto base de licitación, plazo de presentación de ofertas, duración del contrato, número de lotes, etc.>"
+  "services_required": "<CONDICIONES DEL SERVICIO (extraído del pliego de prescripciones técnicas).\\n\\nDescripción general: párrafo de 3-5 frases que explique el objeto y alcance del servicio.\\n\\nActuaciones principales: lista de las 5-10 tareas o actividades más relevantes que debe realizar el adjudicatario.\\n\\nRequisitos de equipo: perfiles profesionales exigidos, titulaciones, experiencia mínima de cada perfil y dedicación requerida.>",
+  "technical_conditions": null,
+  "administrative_conditions": "<CONDICIONES ADMINISTRATIVAS (extraído del pliego de cláusulas administrativas).\\n\\nEntregables: descripción detallada de los productos, informes o resultados que debe entregar el adjudicatario, con plazos y formato si constan.\\n\\nObligaciones del adjudicatario: condiciones operativas impuestas al proveedor (cobertura de servicio, confidencialidad, subcontratación, seguros, penalidades, etc.).\\n\\nCriterios de valoración: listado completo de los criterios de adjudicación con su ponderación exacta (puntos o porcentaje), distinguiendo criterios automáticos de criterios sujetos a juicio de valor.>",
+  "key_data_summary": "<Datos clave: presupuesto base de licitación (con y sin IVA si consta), valor estimado del contrato, plazo límite de presentación de ofertas (fecha y hora), duración del contrato y posibles prórrogas, número de lotes, código CPV, órgano de contratación.>"
 }
 
 Usa null para cualquier campo sobre el que no tengas información suficiente.

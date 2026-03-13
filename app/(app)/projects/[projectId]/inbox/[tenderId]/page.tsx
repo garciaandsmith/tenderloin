@@ -182,31 +182,23 @@ export default async function TenderDetailPage({ params }: Props) {
 
           {analysis?.status === "done" && (
             <div className="space-y-6">
-              {/* Tender summary */}
-              {(analysis.services_required || analysis.technical_conditions) && (
+              {/* Service conditions */}
+              {analysis.services_required && (
                 <div className="rounded-lg border p-4 space-y-3">
-                  <h3 className="font-semibold text-sm">Resumen del pliego técnico</h3>
-                  {analysis.services_required && (
-                    <AnalysisSection
-                      title="Servicios a prestar"
-                      content={analysis.services_required}
-                    />
-                  )}
-                  {analysis.technical_conditions && (
-                    <AnalysisSection
-                      title="Condiciones técnicas"
-                      content={analysis.technical_conditions}
-                    />
-                  )}
+                  <h3 className="font-semibold text-sm">Condiciones del servicio</h3>
+                  <AnalysisSection
+                    title="Descripción, actuaciones y equipo"
+                    content={analysis.services_required}
+                  />
                 </div>
               )}
 
-              {/* Admin summary */}
+              {/* Administrative conditions */}
               {analysis.administrative_conditions && (
                 <div className="rounded-lg border p-4 space-y-3">
-                  <h3 className="font-semibold text-sm">Resumen administrativo</h3>
+                  <h3 className="font-semibold text-sm">Condiciones administrativas</h3>
                   <AnalysisSection
-                    title="Plazos, certificaciones, presupuesto, equipo y criterios de valoración"
+                    title="Entregables, obligaciones y criterios de valoración"
                     content={analysis.administrative_conditions}
                   />
                 </div>

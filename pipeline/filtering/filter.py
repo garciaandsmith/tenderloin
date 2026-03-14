@@ -66,7 +66,7 @@ def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
         client.table("project_filters")
         .select("*")
         .eq("project_id", project_id)
-        .maybeSingle()
+        .maybe_single()
         .execute()
     )
     filter_cfg: dict = filters_resp.data or {}

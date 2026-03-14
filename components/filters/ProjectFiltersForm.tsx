@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProjectFilters } from "@/lib/types/app.types";
-import { AGENCY_CPV_CODES } from "@/lib/utils/cpv";
 import NutsSelector from "@/components/filters/NutsSelector";
 import CpvSelector from "@/components/filters/CpvSelector";
 
@@ -24,7 +23,7 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
   const [budgetMin, setBudgetMin] = useState(f?.budget_min?.toString() ?? "40000");
   const [budgetMax, setBudgetMax] = useState(f?.budget_max?.toString() ?? "");
   const [regions, setRegions] = useState<string[]>(f?.regions ?? ["ES30", "ES300"]);
-  const [cpvCodes, setCpvCodes] = useState<string[]>(f?.cpv_codes ?? AGENCY_CPV_CODES.map((c) => c.code));
+  const [cpvCodes, setCpvCodes] = useState<string[]>(f?.cpv_codes ?? []);
   const [contractTypes, setContractTypes] = useState<string[]>(f?.contract_types ?? ["services"]);
   const [procedureTypes, setProcedureTypes] = useState<string[]>(f?.procedure_types ?? []);
   const [keywordsInclude, setKeywordsInclude] = useState<string[]>(f?.keywords_include ?? []);

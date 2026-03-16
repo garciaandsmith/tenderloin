@@ -5,7 +5,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -13,16 +13,32 @@ _MODEL = "claude-opus-4-6"
 _MAX_DOC_CHARS = 8_000   # chars per document sent to the LLM
 _MAX_TOKENS = 4096
 
-_SYSTEM_PROMPT = """\
+AnalysisType = Literal["technical", "administrative"]
+
+_SYSTEM_PROMPT_TECHNICAL = """\
 Eres un asistente especializado en análisis de licitaciones públicas españolas.
-Se te proporcionan el objeto del contrato y, cuando estén disponibles, el texto del
-Pliego de Prescripciones Técnicas (PPT) y del Pliego de Cláusulas Administrativas (PCAP).
+Se te proporciona el objeto del contrato y el texto del Pliego de Prescripciones
+Técnicas (PPT).
 
 Extrae la información relevante y devuelve ÚNICAMENTE un objeto JSON válido con estas claves:
 
 {
   "services_required": "<Extraído del PLIEGO DE PRESCRIPCIONES TÉCNICAS.\\n\\nResumen del objeto: párrafo de 3-5 frases que explique el objetivo general y el alcance del servicio contratado.\\n\\nServicios y actuaciones: lista numerada y completa de todos los servicios, actividades y tareas que debe realizar el adjudicatario, tal como aparecen en el pliego técnico.\\n\\nRequisitos del equipo: perfiles profesionales exigidos, titulaciones requeridas, experiencia mínima de cada perfil y dedicación (jornada/horas) requerida.>",
-  "technical_conditions": null,
+  "key_data_summary": "<Datos clave: presupuesto base de licitación (con y sin IVA si consta), valor estimado del contrato, plazo límite de presentación de ofertas (fecha y hora), duración del contrato y posibles prórrogas, número de lotes, código CPV, órgano de contratación.>"
+}
+
+Usa null para cualquier campo sobre el que no tengas información suficiente.
+Responde SOLO con el JSON, sin texto antes ni después.
+"""
+
+_SYSTEM_PROMPT_ADMINISTRATIVE = """\
+Eres un asistente especializado en análisis de licitaciones públicas españolas.
+Se te proporciona el objeto del contrato y el texto del Pliego de Cláusulas
+Administrativas (PCAP).
+
+Extrae la información relevante y devuelve ÚNICAMENTE un objeto JSON válido con estas claves:
+
+{
   "administrative_conditions": "<Extraído del PLIEGO DE CLÁUSULAS ADMINISTRATIVAS. Condiciones legales y administrativas relevantes que la empresa debe cumplir: criterios de solvencia económica y técnica, garantías exigidas, condiciones de subcontratación, obligaciones de confidencialidad, seguros requeridos, penalidades por incumplimiento, y cualquier otra obligación administrativa de carácter relevante.>",
   "key_data_summary": "<Datos clave: presupuesto base de licitación (con y sin IVA si consta), valor estimado del contrato, plazo límite de presentación de ofertas (fecha y hora), duración del contrato y posibles prórrogas, número de lotes, código CPV, órgano de contratación.>"
 }
@@ -52,28 +68,38 @@ class LLMAnalyzer:
         title: str,
         summary: str,
         link: str,
-        ppt_text: str,
-        pcap_text: str,
+        analysis_type: AnalysisType,
+        ppt_text: str = "",
+        pcap_text: str = "",
     ) -> AnalysisResult:
-        """Call the LLM and return a structured AnalysisResult."""
+        """Call the LLM for the given *analysis_type* and return a structured AnalysisResult."""
         import anthropic
 
-        ppt_section = ppt_text[:_MAX_DOC_CHARS] if ppt_text else "(no disponible)"
-        pcap_section = pcap_text[:_MAX_DOC_CHARS] if pcap_text else "(no disponible)"
+        if analysis_type == "technical":
+            system_prompt = _SYSTEM_PROMPT_TECHNICAL
+            doc_section = (
+                f"PLIEGO DE PRESCRIPCIONES TÉCNICAS:\n"
+                f"{ppt_text[:_MAX_DOC_CHARS] if ppt_text else '(no disponible)'}"
+            )
+        else:
+            system_prompt = _SYSTEM_PROMPT_ADMINISTRATIVE
+            doc_section = (
+                f"PLIEGO DE CLÁUSULAS ADMINISTRATIVAS:\n"
+                f"{pcap_text[:_MAX_DOC_CHARS] if pcap_text else '(no disponible)'}"
+            )
 
         user_content = (
             f"LICITACIÓN: {title}\n\n"
             f"OBJETO DEL CONTRATO:\n{summary}\n\n"
             f"ENLACE: {link}\n\n"
-            f"PLIEGO DE PRESCRIPCIONES TÉCNICAS:\n{ppt_section}\n\n"
-            f"PLIEGO DE CLÁUSULAS ADMINISTRATIVAS:\n{pcap_section}"
+            f"{doc_section}"
         )
 
         client = anthropic.Anthropic(api_key=self._api_key)
         message = client.messages.create(
             model=_MODEL,
             max_tokens=_MAX_TOKENS,
-            system=_SYSTEM_PROMPT,
+            system=system_prompt,
             messages=[{"role": "user", "content": user_content}],
         )
 

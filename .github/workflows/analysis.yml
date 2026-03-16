@@ -11,10 +11,14 @@ on:
         description: 'Maximum number of analyses to process per run'
         required: false
         default: '10'
+      analysis_type:
+        description: 'Type of analysis to process: technical, administrative, or leave blank for both'
+        required: false
+        default: ''
 
 jobs:
-  analyze:
-    name: Process pending tender analyses
+  analyze-technical:
+    name: Process pending technical analyses
     runs-on: ubuntu-latest
 
     steps:
@@ -32,17 +36,53 @@ jobs:
           pip install --upgrade pip
           if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
 
-      - name: Process pending analyses
+      - name: Process pending technical analyses
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        # Skip this job when the manual trigger explicitly selects 'administrative'
+        if: ${{ github.event.inputs.analysis_type != 'administrative' }}
         run: |
           LIMIT="${{ github.event.inputs.limit || '10' }}"
-          python -m pipeline.run_analysis --limit "$LIMIT"
+          python -m pipeline.run_analysis --limit "$LIMIT" --analysis-type technical
 
       - name: Notify on failure
         if: failure()
         run: |
-          echo "Analysis worker failed at $(date -u). Check the Actions log."
-          # Add Slack/email notification here if needed in the future.
+          echo "Technical analysis worker failed at $(date -u). Check the Actions log."
+
+  analyze-administrative:
+    name: Process pending administrative analyses
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
+
+      - name: Process pending administrative analyses
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        # Skip this job when the manual trigger explicitly selects 'technical'
+        if: ${{ github.event.inputs.analysis_type != 'technical' }}
+        run: |
+          LIMIT="${{ github.event.inputs.limit || '10' }}"
+          python -m pipeline.run_analysis --limit "$LIMIT" --analysis-type administrative
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Administrative analysis worker failed at $(date -u). Check the Actions log."

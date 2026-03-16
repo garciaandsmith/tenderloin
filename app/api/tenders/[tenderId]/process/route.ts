@@ -7,10 +7,17 @@ interface RouteParams {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { tenderId } = await params;
-  const { projectId } = await request.json();
+  const { projectId, analysisType } = await request.json();
 
   if (!projectId) {
     return NextResponse.json({ error: "projectId requerido" }, { status: 400 });
+  }
+
+  if (!analysisType || !["technical", "administrative"].includes(analysisType)) {
+    return NextResponse.json(
+      { error: "analysisType debe ser 'technical' o 'administrative'" },
+      { status: 400 }
+    );
   }
 
   const supabase = await createClient();
@@ -38,12 +45,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Licitación no encontrada" }, { status: 404 });
   }
 
-  // Upsert a pending analysis record (if one already exists with error status, reset it)
+  // Upsert a pending analysis record for this type (reset if previously errored)
   const { error } = await supabase
     .from("tender_analysis")
     .upsert(
       {
         tender_id: tenderIdNum,
+        analysis_type: analysisType,
         project_id: projectId,
         triggered_by: user.id,
         status: "pending",
@@ -56,7 +64,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         triggered_at: new Date().toISOString(),
         completed_at: null,
       },
-      { onConflict: "tender_id" }
+      { onConflict: "tender_id,analysis_type" }
     );
 
   if (error) {

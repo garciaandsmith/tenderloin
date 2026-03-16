@@ -3,11 +3,13 @@
 import { useState, useEffect, useCallback } from "react";
 import type { InboxTender } from "@/lib/types/app.types";
 import TenderRow from "./TenderRow";
+import RescoreButton from "./RescoreButton";
 import { Inbox, Star, CheckCircle } from "lucide-react";
 
 interface Props {
   tenders: InboxTender[];
   projectId: string;
+  isAdmin?: boolean;
 }
 
 type Tab = "all" | "starred" | "processed";
@@ -25,7 +27,7 @@ function getFavoritesKey(projectId: string) {
   return `inbox_favorites_${projectId}`;
 }
 
-export default function InboxList({ tenders, projectId }: Props) {
+export default function InboxList({ tenders, projectId, isAdmin }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [minScore, setMinScore] = useState(0);
   const [maxScore, setMaxScore] = useState(5);
@@ -97,8 +99,9 @@ export default function InboxList({ tenders, projectId }: Props) {
 
   return (
     <div>
-      {/* Tabs */}
-      <div className="flex items-center gap-1 mb-4 border-b">
+      {/* Header row: tabs + admin rescore button */}
+      <div className="flex items-end justify-between mb-4 border-b">
+      <div className="flex items-center gap-1">
         <TabButton
           active={activeTab === "all"}
           onClick={() => setActiveTab("all")}
@@ -120,6 +123,12 @@ export default function InboxList({ tenders, projectId }: Props) {
           label="Procesadas"
           count={processedCount}
         />
+      </div>
+      {isAdmin && (
+        <div className="pb-2">
+          <RescoreButton projectId={projectId} />
+        </div>
+      )}
       </div>
 
       {/* Score filter */}

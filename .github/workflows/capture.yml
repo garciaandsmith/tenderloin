@@ -9,10 +9,10 @@ on:
 
 jobs:
   capture:
-    name: Capture → Filter → Score
+    name: Capture → Filter
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Check out repository
@@ -42,27 +42,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m pipeline.run_filter
-
-      # ── Step 3: Score ──────────────────────────────────────────────────────
-      - name: Download per-project scoring models
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p models
-          gh release download scoring-model-latest \
-            --repo ${{ github.repository }} \
-            --pattern "scoring_*_v????????.pkl" \
-            --dir models/ \
-            --clobber 2>/dev/null \
-          || echo "No model release found — scoring will be skipped for projects without a model. Run the retrain workflow to create initial models."
-
-      - name: Score filter-passing tenders (per project)
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m pipeline.run_score
 
       - name: Notify on failure
         if: failure()

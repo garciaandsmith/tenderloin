@@ -7,6 +7,8 @@ For each pending record in ``tender_analysis`` the script:
 
 Usage:
     python -m pipeline.run_analysis
+    python -m pipeline.run_analysis --analysis-type technical
+    python -m pipeline.run_analysis --analysis-type administrative
 
 Required environment variables:
     SUPABASE_URL
@@ -27,6 +29,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=10,
         help="Maximum number of pending analyses to process per run (default: 10)",
+    )
+    parser.add_argument(
+        "--analysis-type",
+        choices=["technical", "administrative"],
+        default=None,
+        help="Only process records of this type. Omit to process both types.",
     )
     parser.add_argument("--log-level", default="INFO", help="Logging level (default: INFO)")
     return parser.parse_args()
@@ -64,6 +72,7 @@ def main() -> None:
         supabase_key=supabase_key,
         anthropic_api_key=anthropic_key,
         limit=args.limit,
+        analysis_type=args.analysis_type,
     )
     print("analysis_result", {"completed": completed})
 

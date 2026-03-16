@@ -36,6 +36,9 @@ interface Props {
   params: Promise<{ projectId: string; tenderId: string }>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnalysisRow = Record<string, any> | null;
+
 export default async function TenderDetailPage({ params }: Props) {
   const { projectId, tenderId } = await params;
 
@@ -52,12 +55,14 @@ export default async function TenderDetailPage({ params }: Props) {
 
   if (!tender) notFound();
 
-  const [{ data: analysis }, { data: modelScoreRow }] = await Promise.all([
+  const [
+    { data: analysisRows },
+    { data: modelScoreRow },
+  ] = await Promise.all([
     supabase
       .from("tender_analysis")
       .select("*")
-      .eq("tender_id", tender.id)
-      .maybeSingle(),
+      .eq("tender_id", tender.id),
     supabase
       .from("tender_model_scores")
       .select("model_score, model_version, scored_at")
@@ -68,8 +73,17 @@ export default async function TenderDetailPage({ params }: Props) {
       .maybeSingle(),
   ]);
 
+  const technicalAnalysis: AnalysisRow =
+    analysisRows?.find((r) => r.analysis_type === "technical") ?? null;
+  const adminAnalysis: AnalysisRow =
+    analysisRows?.find((r) => r.analysis_type === "administrative") ?? null;
+
+  const canProcessTechnical =
+    !technicalAnalysis || technicalAnalysis.status === "error";
+  const canProcessAdmin =
+    !adminAnalysis || adminAnalysis.status === "error";
+
   const deadline = daysUntil(tender.deadline_at);
-  const canProcess = !analysis || analysis.status === "error";
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -148,97 +162,162 @@ export default async function TenderDetailPage({ params }: Props) {
         </div>
 
         {/* Analysis section */}
-        <div className="pt-4 border-t space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Análisis de documentos</h2>
-            {canProcess && (
-              <ProcessButton
-                tenderId={tender.id}
-                projectId={projectId}
-                userId={user!.id}
-                retrying={analysis?.status === "error"}
-              />
+        <div className="pt-4 border-t space-y-6">
+          <h2 className="font-semibold">Análisis de documentos</h2>
+
+          {/* Technical analysis */}
+          <AnalysisPanel
+            title="Análisis técnico"
+            description="Servicios requeridos, actuaciones y requisitos del equipo (Pliego de Prescripciones Técnicas)."
+            analysis={technicalAnalysis}
+            canProcess={canProcessTechnical}
+            tenderId={tender.id}
+            projectId={projectId}
+            userId={user!.id}
+            analysisType="technical"
+          >
+            {technicalAnalysis?.status === "done" && (
+              <div className="space-y-4">
+                {technicalAnalysis.services_required && (
+                  <div className="rounded-lg border p-4 space-y-3">
+                    <h3 className="font-semibold text-sm">Condiciones del servicio</h3>
+                    <AnalysisSection
+                      title="Descripción, actuaciones y equipo"
+                      content={technicalAnalysis.services_required}
+                    />
+                  </div>
+                )}
+                {technicalAnalysis.key_data_summary && (
+                  <div className="rounded-lg border p-4">
+                    <h3 className="font-semibold text-sm mb-2">Datos clave y plazos</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                      {technicalAnalysis.key_data_summary}
+                    </p>
+                  </div>
+                )}
+                <AttachedFiles files={technicalAnalysis.attached_files} />
+              </div>
             )}
-          </div>
+          </AnalysisPanel>
 
-          {!analysis && (
-            <p className="text-sm text-muted-foreground">
-              Procesa esta licitación para que el sistema descargue y analice los documentos
-              del pliego, generando un resumen técnico y uno administrativo.
-            </p>
-          )}
-
-          {(analysis?.status === "pending" || analysis?.status === "running") && (
-            <div className="rounded-md bg-muted px-4 py-3 text-sm text-muted-foreground">
-              Análisis en curso… Vuelve en unos minutos para ver los resultados.
-            </div>
-          )}
-
-          {analysis?.status === "error" && (
-            <div className="rounded-md bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
-              El análisis encontró un error. Puedes intentarlo de nuevo con el botón de arriba.
-            </div>
-          )}
-
-          {analysis?.status === "done" && (
-            <div className="space-y-6">
-              {/* Service conditions */}
-              {analysis.services_required && (
-                <div className="rounded-lg border p-4 space-y-3">
-                  <h3 className="font-semibold text-sm">Condiciones del servicio</h3>
-                  <AnalysisSection
-                    title="Descripción, actuaciones y equipo"
-                    content={analysis.services_required}
-                  />
-                </div>
-              )}
-
-              {/* Administrative conditions */}
-              {analysis.administrative_conditions && (
-                <div className="rounded-lg border p-4 space-y-3">
-                  <h3 className="font-semibold text-sm">Condiciones administrativas</h3>
-                  <AnalysisSection
-                    title="Entregables, obligaciones y criterios de valoración"
-                    content={analysis.administrative_conditions}
-                  />
-                </div>
-              )}
-
-              {analysis.key_data_summary && (
-                <div className="rounded-lg border p-4">
-                  <h3 className="font-semibold text-sm mb-2">Datos clave y plazos</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-                    {analysis.key_data_summary}
-                  </p>
-                </div>
-              )}
-
-              {/* Attached files */}
-              {Array.isArray(analysis.attached_files) && analysis.attached_files.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-sm mb-2">Documentos adjuntos</h3>
-                  <ul className="space-y-1">
-                    {(analysis.attached_files as Array<{ name: string; url: string; type: string }>).map(
-                      (f, i) => (
-                        <li key={i}>
-                          <a
-                            href={f.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-sm text-primary underline underline-offset-4"
-                          >
-                            {f.name} <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </li>
-                      )
-                    )}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
+          {/* Administrative analysis */}
+          <AnalysisPanel
+            title="Análisis administrativo"
+            description="Condiciones legales y administrativas, solvencia, garantías y obligaciones (Pliego de Cláusulas Administrativas)."
+            analysis={adminAnalysis}
+            canProcess={canProcessAdmin}
+            tenderId={tender.id}
+            projectId={projectId}
+            userId={user!.id}
+            analysisType="administrative"
+          >
+            {adminAnalysis?.status === "done" && (
+              <div className="space-y-4">
+                {adminAnalysis.administrative_conditions && (
+                  <div className="rounded-lg border p-4 space-y-3">
+                    <h3 className="font-semibold text-sm">Condiciones administrativas</h3>
+                    <AnalysisSection
+                      title="Entregables, obligaciones y criterios de valoración"
+                      content={adminAnalysis.administrative_conditions}
+                    />
+                  </div>
+                )}
+                {adminAnalysis.key_data_summary && (
+                  <div className="rounded-lg border p-4">
+                    <h3 className="font-semibold text-sm mb-2">Datos clave y plazos</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                      {adminAnalysis.key_data_summary}
+                    </p>
+                  </div>
+                )}
+                <AttachedFiles files={adminAnalysis.attached_files} />
+              </div>
+            )}
+          </AnalysisPanel>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── sub-components ───────────────────────────────────────────────────────────
+
+function AnalysisPanel({
+  title,
+  description,
+  analysis,
+  canProcess,
+  tenderId,
+  projectId,
+  userId,
+  analysisType,
+  children,
+}: {
+  title: string;
+  description: string;
+  analysis: AnalysisRow;
+  canProcess: boolean;
+  tenderId: number;
+  projectId: string;
+  userId: string;
+  analysisType: "technical" | "administrative";
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border p-4 space-y-3">
+      <div className="flex items-center justify-between gap-4">
+        <h3 className="font-semibold text-sm">{title}</h3>
+        {canProcess && (
+          <ProcessButton
+            tenderId={tenderId}
+            projectId={projectId}
+            userId={userId}
+            analysisType={analysisType}
+            retrying={analysis?.status === "error"}
+          />
+        )}
+      </div>
+
+      {!analysis && (
+        <p className="text-sm text-muted-foreground">{description}</p>
+      )}
+
+      {(analysis?.status === "pending" || analysis?.status === "running") && (
+        <div className="rounded-md bg-muted px-4 py-3 text-sm text-muted-foreground">
+          Análisis en curso… Vuelve en unos minutos para ver los resultados.
+        </div>
+      )}
+
+      {analysis?.status === "error" && (
+        <div className="rounded-md bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
+          El análisis encontró un error. Puedes intentarlo de nuevo con el botón de arriba.
+        </div>
+      )}
+
+      {children}
+    </div>
+  );
+}
+
+function AttachedFiles({ files }: { files: unknown }) {
+  if (!Array.isArray(files) || files.length === 0) return null;
+  return (
+    <div>
+      <h3 className="font-semibold text-sm mb-2">Documentos adjuntos</h3>
+      <ul className="space-y-1">
+        {(files as Array<{ name: string; url: string; type: string }>).map((f, i) => (
+          <li key={i}>
+            <a
+              href={f.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-primary underline underline-offset-4"
+            >
+              {f.name} <ExternalLink className="h-3 w-3" />
+            </a>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

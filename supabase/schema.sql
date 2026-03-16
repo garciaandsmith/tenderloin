@@ -167,7 +167,8 @@ create table public.tender_filter_results (
 -- ─────────────────────────────────────────────────────────────
 create table public.tender_analysis (
   id                        bigserial primary key,
-  tender_id                 bigint not null unique references public.tenders_raw(id),
+  tender_id                 bigint not null references public.tenders_raw(id),
+  analysis_type             text not null check (analysis_type in ('technical', 'administrative')),
   project_id                uuid references public.projects(id),
   triggered_by              uuid references public.profiles(id),
   status                    text not null default 'pending'
@@ -179,7 +180,8 @@ create table public.tender_analysis (
   attached_files            jsonb,  -- [{name, url, type}]
   raw_llm_output            jsonb,
   triggered_at              timestamptz not null default now(),
-  completed_at              timestamptz
+  completed_at              timestamptz,
+  unique (tender_id, analysis_type)
 );
 
 -- =============================================================

@@ -3,7 +3,7 @@
 For each pending record:
   1. Mark status as 'running'.
   2. Fetch the tender's PLACSP page and download attached documents.
-  3. Call the LLM to extract structured summaries.
+  3. Call the LLM to extract structured summaries for the record's analysis_type.
   4. Write results back to tender_analysis (status='done') or mark as 'error'.
 """
 from __future__ import annotations
@@ -20,8 +20,12 @@ def process_pending_analyses(
     supabase_key: str,
     anthropic_api_key: str,
     limit: int = 10,
+    analysis_type: Optional[str] = None,
 ) -> int:
     """Process up to *limit* pending analysis records.
+
+    If *analysis_type* is given ('technical' or 'administrative'), only records
+    of that type are processed.  When omitted both types are processed together.
 
     Returns the number of records successfully completed.
     """
@@ -34,14 +38,17 @@ def process_pending_analyses(
     fetcher = DocumentFetcher()
     analyzer = LLMAnalyzer(anthropic_api_key)
 
-    pending_resp = (
+    query = (
         client.table("tender_analysis")
-        .select("id, tender_id, project_id")
+        .select("id, tender_id, project_id, analysis_type")
         .eq("status", "pending")
         .order("triggered_at")
         .limit(limit)
-        .execute()
     )
+    if analysis_type:
+        query = query.eq("analysis_type", analysis_type)
+
+    pending_resp = query.execute()
     pending = pending_resp.data or []
 
     if not pending:
@@ -54,6 +61,7 @@ def process_pending_analyses(
     for record in pending:
         analysis_id: int = record["id"]
         tender_id: int = record["tender_id"]
+        record_type: str = record["analysis_type"]
 
         # Mark running
         client.table("tender_analysis").update(
@@ -67,11 +75,12 @@ def process_pending_analyses(
                 analyzer=analyzer,
                 analysis_id=analysis_id,
                 tender_id=tender_id,
+                analysis_type=record_type,
             )
         except Exception as exc:
             logger.error(
-                "Analysis %d (tender %d) failed: %s",
-                analysis_id, tender_id, exc, exc_info=True,
+                "Analysis %d (tender %d, type %s) failed: %s",
+                analysis_id, tender_id, record_type, exc, exc_info=True,
             )
             _mark_error(client, analysis_id, str(exc))
 
@@ -88,8 +97,9 @@ def _process_one(
     analyzer: "LLMAnalyzer",
     analysis_id: int,
     tender_id: int,
+    analysis_type: str,
 ) -> int:
-    """Analyse a single tender and update the DB record. Returns 1 on success."""
+    """Analyse a single tender record and update the DB. Returns 1 on success."""
     from pipeline.analysis.document_fetcher import DocumentFetcher
     from pipeline.analysis.llm_client import LLMAnalyzer
 
@@ -120,11 +130,12 @@ def _process_one(
             tender_id, tender.get("link"), exc,
         )
 
-    # Call the LLM
+    # Call the LLM with the appropriate analysis type
     result = analyzer.analyze(
         title=tender["title"],
         summary=tender["summary"],
         link=tender["link"],
+        analysis_type=analysis_type,
         ppt_text=pliego_texts.ppt_text if pliego_texts else "",
         pcap_text=pliego_texts.pcap_text if pliego_texts else "",
     )
@@ -141,7 +152,10 @@ def _process_one(
         "completed_at": _now_iso(),
     }).eq("id", analysis_id).execute()
 
-    logger.info("Analysis %d completed for tender %d.", analysis_id, tender_id)
+    logger.info(
+        "Analysis %d (%s) completed for tender %d.",
+        analysis_id, analysis_type, tender_id,
+    )
     return 1
 
 

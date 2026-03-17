@@ -34,35 +34,33 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
   const supabase = await createClient();
   const filters = await getProjectFilters(projectId);
 
+  // Fetch tender IDs that the pipeline has explicitly evaluated and failed for this project.
+  // Tenders with no filter result yet are kept so newly captured tenders remain visible.
+  const { data: failedRows } = await supabase
+    .from("tender_filter_results")
+    .select("tender_id")
+    .eq("project_id", projectId)
+    .eq("passed", false);
+  const failedIds = (failedRows ?? []).map((r) => r.tender_id);
+
   let query = supabase
     .from("tenders_raw")
     .select(
-      "*, tender_model_scores ( model_score, project_id, model_version ), tender_analysis!left ( status, project_id ), tender_filter_results!left ( passed, project_id )"
+      "*, tender_model_scores ( model_score, project_id, model_version ), tender_analysis!left ( status, project_id )"
     )
     .gt("deadline_at", new Date().toISOString())
     .order("published_at", { ascending: false });
 
   query = applyHardFilters(query, filters);
 
+  if (failedIds.length > 0) {
+    query = query.not("id", "in", `(${failedIds.join(",")})`);
+  }
+
   const { data, error } = await query;
   if (error) throw error;
 
-  const mapped = (data ?? [])
-    .filter((row) => {
-      // Exclude tenders that the pipeline has evaluated and explicitly failed for this project.
-      // Tenders with no filter result yet (pipeline hasn't run) are kept so newly captured
-      // tenders remain visible until the next scoring run.
-      const filterResults = Array.isArray(row.tender_filter_results)
-        ? row.tender_filter_results
-        : row.tender_filter_results
-        ? [row.tender_filter_results]
-        : [];
-      const projectFilter = filterResults.find(
-        (r: { project_id: string }) => r.project_id === projectId
-      );
-      return !projectFilter || projectFilter.passed === true;
-    })
-    .map((row) => {
+  const mapped = (data ?? []).map((row) => {
     const modelScores = Array.isArray(row.tender_model_scores)
       ? row.tender_model_scores
       : row.tender_model_scores
@@ -86,10 +84,9 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
       (a: { project_id: string }) => a.project_id === projectId
     );
 
-    const { tender_model_scores: _tms, tender_analysis: _ta, tender_filter_results: _tfr, ...tender } = row as Record<string, unknown>;
+    const { tender_model_scores: _tms, tender_analysis: _ta, ...tender } = row as Record<string, unknown>;
     void _tms;
     void _ta;
-    void _tfr;
 
     return {
       ...(tender as Parameters<typeof Object.assign>[0]),

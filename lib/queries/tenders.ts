@@ -34,15 +34,6 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
   const supabase = await createClient();
   const filters = await getProjectFilters(projectId);
 
-  // Fetch tender IDs that the pipeline has explicitly evaluated and failed for this project.
-  // Tenders with no filter result yet are kept so newly captured tenders remain visible.
-  const { data: failedRows } = await supabase
-    .from("tender_filter_results")
-    .select("tender_id")
-    .eq("project_id", projectId)
-    .eq("passed", false);
-  const failedIds = (failedRows ?? []).map((r) => r.tender_id);
-
   let query = supabase
     .from("tenders_raw")
     .select(
@@ -52,10 +43,6 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
     .order("published_at", { ascending: false });
 
   query = applyHardFilters(query, filters);
-
-  if (failedIds.length > 0) {
-    query = query.not("id", "in", `(${failedIds.join(",")})`);
-  }
 
   const { data, error } = await query;
   if (error) throw error;

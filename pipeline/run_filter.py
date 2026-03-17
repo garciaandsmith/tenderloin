@@ -27,6 +27,11 @@ def parse_args() -> argparse.Namespace:
         default=500,
         help="Number of tenders to fetch per Supabase request",
     )
+    parser.add_argument(
+        "--project-id",
+        default=None,
+        help="Filter only this project UUID (default: all active projects)",
+    )
     parser.add_argument("--log-level", default="INFO", help="Log level")
     return parser.parse_args()
 
@@ -52,6 +57,7 @@ def main() -> None:
         supabase_url=supabase_url,
         supabase_key=supabase_key,
         batch_size=args.batch_size,
+        project_id=args.project_id or None,
     )
     print("filter_result", summary)
 

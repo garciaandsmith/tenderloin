@@ -23,27 +23,32 @@ def run_filter_pipeline(
     supabase_url: str,
     supabase_key: str,
     batch_size: int = 500,
+    project_id: str | None = None,
 ) -> dict[str, int]:
-    """Filter all new tenders for every active project.
+    """Filter all new tenders for one or every active project.
 
+    If *project_id* is given only that project is processed.
     Returns a dict mapping project_id → number of filter results written.
     """
     from supabase import create_client
 
     client = create_client(supabase_url, supabase_key)
 
-    projects_resp = (
-        client.table("projects")
-        .select("id")
-        .eq("is_active", True)
-        .execute()
-    )
-    project_ids = [row["id"] for row in (projects_resp.data or [])]
-    if not project_ids:
-        logger.info("No active projects found. Nothing to filter.")
-        return {}
-
-    logger.info("Running hard filters for %d active project(s)", len(project_ids))
+    if project_id:
+        project_ids = [project_id]
+        logger.info("Running hard filters for project: %s", project_id)
+    else:
+        projects_resp = (
+            client.table("projects")
+            .select("id")
+            .eq("is_active", True)
+            .execute()
+        )
+        project_ids = [row["id"] for row in (projects_resp.data or [])]
+        if not project_ids:
+            logger.info("No active projects found. Nothing to filter.")
+            return {}
+        logger.info("Running hard filters for %d active project(s)", len(project_ids))
 
     summary: dict[str, int] = {}
     for project_id in project_ids:

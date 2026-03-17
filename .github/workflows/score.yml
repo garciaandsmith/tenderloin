@@ -36,9 +36,16 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m pipeline.run_filter
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: |
+          if [ -n "$PROJECT_ID" ]; then
+            python -m pipeline.run_filter --project-id "$PROJECT_ID"
+          else
+            python -m pipeline.run_filter
+          fi
 
       # ── Step 2: Train ──────────────────────────────────────────────────────
+      # Always trains all projects so the model release stays up to date.
       - name: Train per-project scoring models and publish
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -47,11 +54,17 @@ jobs:
         run: python -m pipeline.run_train --publish
 
       # ── Step 3: Score ──────────────────────────────────────────────────────
-      - name: Score filter-passing tenders (per project)
+      - name: Score active tenders (per project)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m pipeline.run_score
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: |
+          if [ -n "$PROJECT_ID" ]; then
+            python -m pipeline.run_score --project-id "$PROJECT_ID"
+          else
+            python -m pipeline.run_score
+          fi
 
       - name: Notify on failure
         if: failure()

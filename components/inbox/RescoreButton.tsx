@@ -106,7 +106,7 @@ export default function RescoreButton({ projectId }: Props) {
         className="gap-2"
       >
         <RefreshCw className={`h-3.5 w-3.5 ${spinning ? "animate-spin" : ""}`} />
-        {triggering ? "Lanzando…" : isRunning ? "Actualizando…" : "Actualizar puntuaciones"}
+        {triggering ? "Lanzando…" : isRunning ? "Actualizando…" : "Actualizar Inbox"}
       </Button>
 
       <span className="text-xs text-muted-foreground">

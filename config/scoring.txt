@@ -17,8 +17,3 @@ La licitación presenta una alta coherencia con los servicios y experiencia de l
 
 5 — Sí
 El objeto del contrato se ajusta plenamente a las competencias, capacidades y propuesta de valor de la agencia. La coherencia es clara y directa.
-
-
------
-
-Cada vez que se actualice el CSV con resultados hay que ejecutar el script de entrenamiento: python csv_trainer.py historico_licitaciones.csv

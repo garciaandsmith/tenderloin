@@ -5,7 +5,6 @@ is mocked so the suite runs quickly in CI without heavy dependencies.
 """
 from __future__ import annotations
 
-import pickle
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,163 +17,72 @@ _PROJECT_ID = "proj-abc-123"
 _PROJECT_ID_2 = "proj-xyz-456"
 
 
+def _make_supabase_mock(rows: list[dict], training_session: int = 1) -> MagicMock:
+    """Return a mock supabase module whose create_client() returns a client
+    that serves ``rows`` for tender_scores queries."""
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value \
+        .single.return_value.execute.return_value.data = {"training_session": training_session}
+    mock_client.table.return_value.select.return_value.eq.return_value \
+        .eq.return_value.neq.return_value.execute.return_value.data = rows
+    mock_supabase = MagicMock()
+    mock_supabase.create_client.return_value = mock_client
+    return mock_supabase
+
+
 class TestLoadDatasetForProject(unittest.TestCase):
-    """Tests for pipeline.scoring.dataset.load_dataset_for_project."""
+    """Tests for pipeline.scoring.dataset.load_dataset_for_project.
 
-    def _write_csv(self, tmp_dir: str, rows: list[dict]) -> Path:
-        df = pd.DataFrame(rows)
-        path = Path(tmp_dir) / "historico.csv"
-        df.to_csv(path, index=False)
-        return path
+    All data comes from mocked Supabase — no CSV involved.
+    """
 
-    def test_loads_text_and_score_from_csv(self) -> None:
+    _URL = "https://example.supabase.co"
+    _KEY = "test-key"
+
+    def _load(self, rows: list[dict]) -> pd.DataFrame:
         from pipeline.scoring.dataset import load_dataset_for_project
+        mock_supabase = _make_supabase_mock(rows)
+        with patch.dict("sys.modules", {"supabase": mock_supabase}):
+            return load_dataset_for_project(_PROJECT_ID, self._URL, self._KEY)
 
-        with tempfile.TemporaryDirectory() as tmp:
-            csv = self._write_csv(tmp, [
-                {"Objeto": "Servicio de comunicación digital", "Score": 4},
-                {"Objeto": "Suministro de equipos informáticos", "Score": 1},
-            ])
-            df = load_dataset_for_project(_PROJECT_ID, csv_path=csv)
-
+    def test_loads_text_and_score_from_supabase(self) -> None:
+        df = self._load([
+            {"score": 4, "tenders_raw": {"title": "Servicio de comunicación digital", "summary": ""}},
+            {"score": 1, "tenders_raw": {"title": "Suministro de equipos informáticos", "summary": ""}},
+        ])
         self.assertIn("text", df.columns)
         self.assertIn("score", df.columns)
         self.assertEqual(len(df), 2)
 
     def test_excludes_score_zero_rows(self) -> None:
-        """Score 0 means 'manual review needed' and must be excluded from training."""
-        from pipeline.scoring.dataset import load_dataset_for_project
-
-        with tempfile.TemporaryDirectory() as tmp:
-            csv = self._write_csv(tmp, [
-                {"Objeto": "Texto A", "Score": 0},
-                {"Objeto": "Texto B", "Score": 3},
-            ])
-            df = load_dataset_for_project(_PROJECT_ID, csv_path=csv)
-
+        """Score 0 means 'manual review needed' — the query excludes them, but
+        the post-filter also guards against it."""
+        df = self._load([
+            {"score": 3, "tenders_raw": {"title": "Texto B", "summary": ""}},
+        ])
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]["score"], 3.0)
 
-    def test_excludes_rows_with_missing_score(self) -> None:
-        from pipeline.scoring.dataset import load_dataset_for_project
-
-        with tempfile.TemporaryDirectory() as tmp:
-            csv = self._write_csv(tmp, [
-                {"Objeto": "Texto A", "Score": None},
-                {"Objeto": "Texto B", "Score": 5},
-            ])
-            df = load_dataset_for_project(_PROJECT_ID, csv_path=csv)
-
+    def test_excludes_rows_with_empty_text(self) -> None:
+        """Rows where both title and summary are empty are dropped."""
+        df = self._load([
+            {"score": 5, "tenders_raw": {"title": "Texto con contenido", "summary": "Descripción"}},
+            {"score": 2, "tenders_raw": {"title": "", "summary": ""}},
+        ])
         self.assertEqual(len(df), 1)
 
     def test_score_column_is_float(self) -> None:
-        from pipeline.scoring.dataset import load_dataset_for_project
-
-        with tempfile.TemporaryDirectory() as tmp:
-            csv = self._write_csv(tmp, [
-                {"Objeto": "Servicio de marketing", "Score": "4"},
-            ])
-            df = load_dataset_for_project(_PROJECT_ID, csv_path=csv)
-
+        df = self._load([
+            {"score": "4", "tenders_raw": {"title": "Servicio de marketing", "summary": ""}},
+        ])
         self.assertEqual(df["score"].dtype, float)
 
-    def test_raises_when_no_data(self) -> None:
+    def test_raises_when_no_rows_returned(self) -> None:
         from pipeline.scoring.dataset import load_dataset_for_project
-
-        with tempfile.TemporaryDirectory() as tmp:
-            # CSV with only score-0 rows -> empty after filtering
-            csv = self._write_csv(tmp, [
-                {"Objeto": "A", "Score": 0},
-            ])
+        mock_supabase = _make_supabase_mock([])
+        with patch.dict("sys.modules", {"supabase": mock_supabase}):
             with self.assertRaises(ValueError):
-                load_dataset_for_project(_PROJECT_ID, csv_path=csv)
-
-    def test_raises_when_no_csv_path_and_no_supabase_credentials(self) -> None:
-        """No csv_path and no Supabase credentials → ValueError (no data sources)."""
-        from pipeline.scoring.dataset import load_dataset_for_project
-
-        with self.assertRaises(ValueError):
-            load_dataset_for_project(_PROJECT_ID)
-
-    def test_csv_not_used_when_csv_path_is_none(self) -> None:
-        """When csv_path=None the CSV file is never loaded; only Supabase rows are used."""
-        from pipeline.scoring.dataset import load_dataset_for_project
-        from unittest.mock import patch
-
-        mock_client = MagicMock()
-        # projects table → training_session
-        mock_client.table.return_value.select.return_value.eq.return_value \
-            .single.return_value.execute.return_value.data = {"training_session": 1}
-        # tender_scores table → one row
-        mock_client.table.return_value.select.return_value.eq.return_value \
-            .eq.return_value.neq.return_value.execute.return_value.data = [
-                {"score": 4, "tenders_raw": {"title": "Supabase-only tender", "summary": "Test"}},
-            ]
-
-        mock_supabase = MagicMock()
-        mock_supabase.create_client.return_value = mock_client
-
-        with tempfile.TemporaryDirectory() as tmp:
-            # Write a CSV that must NOT appear in the result
-            self._write_csv(tmp, [{"Objeto": "CSV-only tender", "Score": 5}])
-
-            with patch.dict("sys.modules", {"supabase": mock_supabase}):
-                df = load_dataset_for_project(
-                    _PROJECT_ID,
-                    supabase_url="https://example.supabase.co",
-                    supabase_key="test-key",
-                    csv_path=None,
-                )
-
-        self.assertEqual(len(df), 1)
-        self.assertIn("Supabase-only tender", df["text"].iloc[0])
-        self.assertNotIn("CSV-only tender", df["text"].tolist())
-
-
-# Keep legacy load_dataset tests so existing CSV-only tooling is not broken.
-class TestLoadDatasetLegacy(unittest.TestCase):
-    """Tests for the legacy pipeline.scoring.dataset.load_dataset function."""
-
-    def _write_csv(self, tmp_dir: str, rows: list[dict]) -> Path:
-        df = pd.DataFrame(rows)
-        path = Path(tmp_dir) / "historico.csv"
-        df.to_csv(path, index=False)
-        return path
-
-    def test_loads_text_and_score_from_csv(self) -> None:
-        from pipeline.scoring.dataset import load_dataset
-
-        with tempfile.TemporaryDirectory() as tmp:
-            csv = self._write_csv(tmp, [
-                {"Objeto": "Servicio de comunicación digital", "Score": 4},
-                {"Objeto": "Suministro de equipos informáticos", "Score": 1},
-            ])
-            df = load_dataset(csv)
-
-        self.assertIn("text", df.columns)
-        self.assertIn("score", df.columns)
-        self.assertEqual(len(df), 2)
-
-    def test_excludes_score_zero_rows(self) -> None:
-        from pipeline.scoring.dataset import load_dataset
-
-        with tempfile.TemporaryDirectory() as tmp:
-            csv = self._write_csv(tmp, [
-                {"Objeto": "Texto A", "Score": 0},
-                {"Objeto": "Texto B", "Score": 3},
-            ])
-            df = load_dataset(csv)
-
-        self.assertEqual(len(df), 1)
-        self.assertEqual(df.iloc[0]["score"], 3.0)
-
-    def test_raises_when_no_data(self) -> None:
-        from pipeline.scoring.dataset import load_dataset
-
-        with tempfile.TemporaryDirectory() as tmp:
-            csv = self._write_csv(tmp, [{"Objeto": "A", "Score": 0}])
-            with self.assertRaises(ValueError):
-                load_dataset(csv)
+                load_dataset_for_project(_PROJECT_ID, self._URL, self._KEY)
 
 
 class TestModelIO(unittest.TestCase):

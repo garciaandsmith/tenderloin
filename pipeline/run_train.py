@@ -3,20 +3,14 @@
 Usage:
     python -m pipeline.run_train
     python -m pipeline.run_train --models-dir models/
-    python -m pipeline.run_train --csv-path data/historico_licitaciones.csv \\
-        --baseline-project-id <uuid>
     python -m pipeline.run_train --publish
 
 For each active project the script:
   1. Loads training data: that project's human scores from Supabase
-     (current training session only).  Projects learn in isolation —
-     scores from one project never influence another project's model.
-  2. Optionally, if ``--baseline-project-id`` is supplied, the project
-     matching that UUID also receives the historical CSV (``--csv-path``)
-     as additional training data.  This is intended for the original seed
-     project whose historical labels live in the CSV.
-  3. Trains a sentence-transformer + Ridge regression model.
-  4. Saves the artifact as ``models/scoring_<project_id>_v<YYYYMMDD>.pkl``.
+     (current training session only).  Each project learns in isolation
+     from its own labeled data only.
+  2. Trains a sentence-transformer + Ridge regression model.
+  3. Saves the artifact as ``models/scoring_<project_id>_v<YYYYMMDD>.pkl``.
 
 With ``--publish`` all per-project artifacts are uploaded together to a single
 ``scoring-model-latest`` GitHub Release, replacing the previous release.
@@ -35,22 +29,6 @@ from pathlib import Path
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Train one relevance model per active project"
-    )
-    parser.add_argument(
-        "--csv-path",
-        default="data/historico_licitaciones.csv",
-        help="Path to the historical scored tenders CSV (used only for the baseline project)",
-    )
-    parser.add_argument(
-        "--baseline-project-id",
-        default=None,
-        metavar="UUID",
-        help=(
-            "Project ID of the original seed project that owns the historical CSV. "
-            "Only this project will train with --csv-path data. "
-            "All other projects train solely on their own Supabase scores. "
-            "When omitted, the CSV is not used for any project."
-        ),
     )
     parser.add_argument(
         "--models-dir",
@@ -100,7 +78,6 @@ def main() -> None:
     from pipeline.scoring.train import train
     from pipeline.scoring.model_io import save_model, publish_model_release
 
-    csv_path = Path(args.csv_path)
     models_dir = Path(args.models_dir)
 
     client = create_client(supabase_url, supabase_key)
@@ -124,20 +101,12 @@ def main() -> None:
         project_id = proj["id"]
         project_name = proj.get("name", project_id)
 
-        # Only pass the CSV to the project that historically produced those scores.
-        project_csv = (
-            csv_path
-            if args.baseline_project_id and project_id == args.baseline_project_id
-            else None
-        )
-
         log.info("[%s] Loading dataset for project '%s'…", project_id, project_name)
         try:
             df = load_dataset_for_project(
                 project_id=project_id,
                 supabase_url=supabase_url,
                 supabase_key=supabase_key,
-                csv_path=project_csv,
             )
         except ValueError as exc:
             log.warning("[%s] Skipping — no training data: %s", project_id, exc)

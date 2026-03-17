@@ -11,6 +11,8 @@ jobs:
   retrain:
     name: Retrain per-project relevance scoring models
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to publish the scoring-model-latest release
 
     steps:
       - name: Check out repository

@@ -41,8 +41,9 @@ class _AnunciosTableParser(HTMLParser):
     The PLACSP tender page contains a section headed "Anuncios y Documentos"
     with a table of publication rows. Each row has a document name cell and a
     set of format-icon links (HTML, XML, PDF, download). This parser locates
-    the 'Pliego' row and returns the href of the first link in its icons cell
-    (the HTML format icon).
+    any row whose document name contains "pliego" (e.g. "Pliego",
+    "Rectificación de Pliego") and returns the href of the first link in its
+    icons cell (the HTML format icon).
     """
 
     def __init__(self, base_url: str) -> None:
@@ -104,7 +105,7 @@ class _AnunciosTableParser(HTMLParser):
 
         if tag == "td" and self._in_doc_name_cell:
             cell_text = self._current_cell_text.strip().lower()
-            if cell_text == "pliego":
+            if "pliego" in cell_text:
                 self._current_row_has_pliego = True
             self._in_doc_name_cell = False
 
@@ -116,10 +117,11 @@ class _AnunciosTableParser(HTMLParser):
 
 
 class _PliegoDocParser(HTMLParser):
-    """Finds PPT and PCAP PDF links on the Pliego HTML page.
+    """Finds PPT and PCAP document links on the Pliego HTML page.
 
-    Looks for <a href="...pdf"> tags whose visible text or title attribute
-    contains keywords identifying each document type.
+    Looks for <a href="..."> tags whose visible text or title attribute
+    contains keywords identifying each document type. Accepts any link format
+    (PDF, DOCX, HTML viewer) — content-type detection happens at download time.
     """
 
     _PPT_KEYWORDS = ("prescripciones",)
@@ -141,9 +143,6 @@ class _PliegoDocParser(HTMLParser):
         attr = dict(attrs)
         href = attr.get("href", "")
         if not href:
-            return
-        ext = _get_extension(href)
-        if ext != ".pdf":
             return
         self._current_href = urljoin(self.base_url, href)
         self._current_title = (attr.get("title") or attr.get("data-title") or "").lower()

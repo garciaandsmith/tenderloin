@@ -11,10 +11,10 @@ on:
 
 jobs:
   score:
-    name: Filter → Score
+    name: Filter → Train → Score
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write   # needed to publish the scoring-model-latest release
 
     steps:
       - name: Check out repository
@@ -38,19 +38,15 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m pipeline.run_filter
 
-      # ── Step 2: Score ──────────────────────────────────────────────────────
-      - name: Download per-project scoring models
+      # ── Step 2: Train ──────────────────────────────────────────────────────
+      - name: Train per-project scoring models and publish
         env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p models
-          gh release download scoring-model-latest \
-            --repo ${{ github.repository }} \
-            --pattern "scoring_*_v????????.pkl" \
-            --dir models/ \
-            --clobber 2>/dev/null \
-          || echo "No model release found — scoring will be skipped for projects without a model."
+        run: python -m pipeline.run_train --publish
 
+      # ── Step 3: Score ──────────────────────────────────────────────────────
       - name: Score filter-passing tenders (per project)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

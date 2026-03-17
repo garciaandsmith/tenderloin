@@ -1,0 +1,75 @@
+name: Ingest Historical Tenders
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_year:
+        description: 'Start year (inclusive)'
+        required: true
+        default: '2022'
+      from_month:
+        description: 'Start month 1–12 (inclusive)'
+        required: true
+        default: '1'
+      to_year:
+        description: 'End year (inclusive, defaults to current year)'
+        required: false
+        default: ''
+      to_month:
+        description: 'End month 1–12 (inclusive, defaults to current month)'
+        required: false
+        default: ''
+
+jobs:
+  ingest:
+    name: Bulk ingest historical PLACSP ZIPs
+    runs-on: ubuntu-latest
+    # Historical ingestion can take a long time for wide date ranges
+    timeout-minutes: 360
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
+
+      - name: Build date-range args
+        id: args
+        run: |
+          FROM_YEAR="${{ github.event.inputs.from_year }}"
+          FROM_MONTH="${{ github.event.inputs.from_month }}"
+          TO_YEAR="${{ github.event.inputs.to_year }}"
+          TO_MONTH="${{ github.event.inputs.to_month }}"
+
+          EXTRA_ARGS=""
+          if [ -n "$TO_YEAR" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --to-year $TO_YEAR"
+          fi
+          if [ -n "$TO_MONTH" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --to-month $TO_MONTH"
+          fi
+
+          echo "cmd=--from-year $FROM_YEAR --from-month $FROM_MONTH $EXTRA_ARGS" >> "$GITHUB_OUTPUT"
+
+      - name: Ingest historical tenders
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m pipeline.run_ingest_historical ${{ steps.args.outputs.cmd }}
+
+      - name: Run hard filters on newly ingested tenders
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m pipeline.run_filter

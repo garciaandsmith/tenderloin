@@ -37,7 +37,7 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
   let query = supabase
     .from("tenders_raw")
     .select(
-      "*, tender_model_scores ( model_score, project_id, model_version ), tender_analysis!left ( status, project_id )"
+      "*, tender_model_scores ( model_score, project_id, model_version ), tender_analysis!left ( status, project_id ), tender_filter_results!left ( passed, project_id )"
     )
     .gt("deadline_at", new Date().toISOString())
     .order("published_at", { ascending: false });
@@ -47,7 +47,22 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
   const { data, error } = await query;
   if (error) throw error;
 
-  const mapped = (data ?? []).map((row) => {
+  const mapped = (data ?? [])
+    .filter((row) => {
+      // Exclude tenders that the pipeline has evaluated and explicitly failed for this project.
+      // Tenders with no filter result yet (pipeline hasn't run) are kept so newly captured
+      // tenders remain visible until the next scoring run.
+      const filterResults = Array.isArray(row.tender_filter_results)
+        ? row.tender_filter_results
+        : row.tender_filter_results
+        ? [row.tender_filter_results]
+        : [];
+      const projectFilter = filterResults.find(
+        (r: { project_id: string }) => r.project_id === projectId
+      );
+      return !projectFilter || projectFilter.passed === true;
+    })
+    .map((row) => {
     const modelScores = Array.isArray(row.tender_model_scores)
       ? row.tender_model_scores
       : row.tender_model_scores
@@ -71,9 +86,10 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
       (a: { project_id: string }) => a.project_id === projectId
     );
 
-    const { tender_model_scores: _tms, tender_analysis: _ta, ...tender } = row as Record<string, unknown>;
+    const { tender_model_scores: _tms, tender_analysis: _ta, tender_filter_results: _tfr, ...tender } = row as Record<string, unknown>;
     void _tms;
     void _ta;
+    void _tfr;
 
     return {
       ...(tender as Parameters<typeof Object.assign>[0]),

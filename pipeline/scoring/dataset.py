@@ -1,13 +1,15 @@
 """Build a training dataset for a specific project.
 
-The dataset combines two sources:
-1. A shared historical CSV (``csv_path``) with columns ``Objeto`` → text and
-   ``Score`` → score.  This acts as a universal baseline so that new projects
-   with few human labels still produce a reasonable initial model.
-2. Human scores stored in Supabase for *this project only* (``project_id``).
-   Only scores from the project's current ``training_session`` are included,
-   so that a score-reset (which increments the session counter) is immediately
-   reflected without having to delete rows.
+The dataset is built from human scores stored in Supabase for *this project
+only* (``project_id``).  Only scores from the project's current
+``training_session`` are included, so that a score-reset (which increments
+the session counter) is immediately reflected without having to delete rows.
+
+Optionally, a historical CSV (``csv_path``) with columns ``Objeto`` → text
+and ``Score`` → score can be merged in.  This is intended solely for the
+project that originally produced those scores (the seed / marketing-agency
+project).  All other projects should omit ``csv_path`` so their models learn
+exclusively from their own labeled data.
 
 Rows with ``score == 0`` are excluded because 0 means "manual review needed".
 """
@@ -21,19 +23,24 @@ import pandas as pd
 
 def load_dataset_for_project(
     project_id: str,
-    csv_path: Path,
     supabase_url: Optional[str] = None,
     supabase_key: Optional[str] = None,
+    csv_path: Optional[Path] = None,
 ) -> pd.DataFrame:
     """Return a DataFrame with columns ``text`` and ``score`` (float) for
     the given ``project_id``.
+
+    ``csv_path`` is optional.  When provided the CSV rows are merged into the
+    training set alongside the project's Supabase scores.  Omit it (or pass
+    ``None``) for full learning isolation — the model will train only on this
+    project's own human-labeled data.
 
     Raises ``ValueError`` if no usable training rows are found.
     """
     frames: list[pd.DataFrame] = []
 
-    # --- Shared historical CSV baseline ---
-    if csv_path.exists():
+    # --- Optional historical CSV baseline (only for the owning project) ---
+    if csv_path is not None and csv_path.exists():
         df_csv = pd.read_csv(csv_path)
         df_csv = df_csv.rename(columns={"Objeto": "text", "Score": "score"})
         df_csv = df_csv[["text", "score"]].dropna()

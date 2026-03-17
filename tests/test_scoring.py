@@ -35,7 +35,7 @@ class TestLoadDatasetForProject(unittest.TestCase):
                 {"Objeto": "Servicio de comunicación digital", "Score": 4},
                 {"Objeto": "Suministro de equipos informáticos", "Score": 1},
             ])
-            df = load_dataset_for_project(_PROJECT_ID, csv)
+            df = load_dataset_for_project(_PROJECT_ID, csv_path=csv)
 
         self.assertIn("text", df.columns)
         self.assertIn("score", df.columns)
@@ -50,7 +50,7 @@ class TestLoadDatasetForProject(unittest.TestCase):
                 {"Objeto": "Texto A", "Score": 0},
                 {"Objeto": "Texto B", "Score": 3},
             ])
-            df = load_dataset_for_project(_PROJECT_ID, csv)
+            df = load_dataset_for_project(_PROJECT_ID, csv_path=csv)
 
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]["score"], 3.0)
@@ -63,7 +63,7 @@ class TestLoadDatasetForProject(unittest.TestCase):
                 {"Objeto": "Texto A", "Score": None},
                 {"Objeto": "Texto B", "Score": 5},
             ])
-            df = load_dataset_for_project(_PROJECT_ID, csv)
+            df = load_dataset_for_project(_PROJECT_ID, csv_path=csv)
 
         self.assertEqual(len(df), 1)
 
@@ -74,7 +74,7 @@ class TestLoadDatasetForProject(unittest.TestCase):
             csv = self._write_csv(tmp, [
                 {"Objeto": "Servicio de marketing", "Score": "4"},
             ])
-            df = load_dataset_for_project(_PROJECT_ID, csv)
+            df = load_dataset_for_project(_PROJECT_ID, csv_path=csv)
 
         self.assertEqual(df["score"].dtype, float)
 
@@ -87,7 +87,48 @@ class TestLoadDatasetForProject(unittest.TestCase):
                 {"Objeto": "A", "Score": 0},
             ])
             with self.assertRaises(ValueError):
-                load_dataset_for_project(_PROJECT_ID, csv)
+                load_dataset_for_project(_PROJECT_ID, csv_path=csv)
+
+    def test_raises_when_no_csv_path_and_no_supabase_credentials(self) -> None:
+        """No csv_path and no Supabase credentials → ValueError (no data sources)."""
+        from pipeline.scoring.dataset import load_dataset_for_project
+
+        with self.assertRaises(ValueError):
+            load_dataset_for_project(_PROJECT_ID)
+
+    def test_csv_not_used_when_csv_path_is_none(self) -> None:
+        """When csv_path=None the CSV file is never loaded; only Supabase rows are used."""
+        from pipeline.scoring.dataset import load_dataset_for_project
+        from unittest.mock import patch
+
+        mock_client = MagicMock()
+        # projects table → training_session
+        mock_client.table.return_value.select.return_value.eq.return_value \
+            .single.return_value.execute.return_value.data = {"training_session": 1}
+        # tender_scores table → one row
+        mock_client.table.return_value.select.return_value.eq.return_value \
+            .eq.return_value.neq.return_value.execute.return_value.data = [
+                {"score": 4, "tenders_raw": {"title": "Supabase-only tender", "summary": "Test"}},
+            ]
+
+        mock_supabase = MagicMock()
+        mock_supabase.create_client.return_value = mock_client
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # Write a CSV that must NOT appear in the result
+            self._write_csv(tmp, [{"Objeto": "CSV-only tender", "Score": 5}])
+
+            with patch.dict("sys.modules", {"supabase": mock_supabase}):
+                df = load_dataset_for_project(
+                    _PROJECT_ID,
+                    supabase_url="https://example.supabase.co",
+                    supabase_key="test-key",
+                    csv_path=None,
+                )
+
+        self.assertEqual(len(df), 1)
+        self.assertIn("Supabase-only tender", df["text"].iloc[0])
+        self.assertNotIn("CSV-only tender", df["text"].tolist())
 
 
 # Keep legacy load_dataset tests so existing CSV-only tooling is not broken.

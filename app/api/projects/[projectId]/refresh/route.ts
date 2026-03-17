@@ -8,9 +8,10 @@ interface Params {
 /**
  * POST /api/projects/[projectId]/refresh
  *
- * Triggers the score.yml GitHub Actions workflow incrementally —
- * does NOT clear existing filter results or model scores, so only
- * new/unscored tenders are processed.
+ * Clears existing model scores for the project (so the scoring step
+ * re-scores ALL active tenders with the freshly trained model), then
+ * triggers the score.yml workflow.  Filter results are kept intact so
+ * the filter step only evaluates genuinely new tenders.
  *
  * Admin-only.
  */
@@ -29,6 +30,21 @@ export async function POST(_request: Request, { params }: Params) {
     .eq("id", user.id)
     .single();
   if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  // Clear existing model scores for this project so the scoring pipeline
+  // re-evaluates all active tenders with the freshly trained model.
+  // Filter results are intentionally preserved — the filter step will only
+  // process tenders it has not yet evaluated (incremental).
+  const { error: scoresError } = await supabase
+    .from("tender_model_scores")
+    .delete()
+    .eq("project_id", projectId);
+  if (scoresError) {
+    return NextResponse.json(
+      { error: `Failed to clear scores: ${scoresError.message}` },
+      { status: 500 }
+    );
+  }
 
   const token = process.env.GITHUB_TOKEN;
   const owner = process.env.GITHUB_OWNER;

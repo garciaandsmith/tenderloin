@@ -78,7 +78,6 @@ python pipeline/run_capture.py --source-url file://data/sample.json
 
 | File | Purpose |
 |------|---------|
-| `data/historico_licitaciones.csv` | ~800 historical bids scored 0–5 — the learning dataset |
 | `config/CodigosCPV.txt` | CPV codes the agency can execute |
 | `config/credenciales_agencia.txt` | Agency profile (what we do, what we're good at) |
 | `config/scoring.txt` | Definition of each score level (0–5) |

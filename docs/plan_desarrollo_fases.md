@@ -84,7 +84,7 @@ Asignar score 0–5 usando relación histórica entre `Objeto` y `Score`.
 3. Features adicionales de texto opcionales (longitud, palabras clave de agencia).
 
 ### Datos de entrenamiento
-- `data/historico_licitaciones.csv` como dataset inicial.
+- Scores humanos almacenados en Supabase por proyecto (tabla `tender_scores`).
 - `config/credenciales_agencia.txt` y `config/scoring.txt` como conocimiento de negocio para enriquecer prompts/features.
 
 ### Entregables

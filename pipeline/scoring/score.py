@@ -54,14 +54,26 @@ def score_unscored_tenders(
         logger.info("Scoring for %d active project(s): %s", len(project_ids), project_ids)
 
     # Fetch all active tender IDs once (future deadline only) — reused for every project.
+    # Paginate to avoid the default 1000-row cap in the Supabase client.
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    active_resp = (
-        client.table("tenders_raw")
-        .select("id")
-        .gt("deadline_at", now_iso)
-        .execute()
-    )
-    active_ids = {row["id"] for row in (active_resp.data or [])}
+    active_ids: set[int] = set()
+    _page_size = 1000
+    _offset = 0
+    while True:
+        active_resp = (
+            client.table("tenders_raw")
+            .select("id")
+            .gt("deadline_at", now_iso)
+            .order("id")
+            .range(_offset, _offset + _page_size - 1)
+            .execute()
+        )
+        _batch = active_resp.data or []
+        for row in _batch:
+            active_ids.add(row["id"])
+        if len(_batch) < _page_size:
+            break
+        _offset += _page_size
     logger.info("Active tenders (future deadline): %d", len(active_ids))
 
     if not active_ids:
@@ -91,15 +103,24 @@ def score_unscored_tenders(
 
         embedder = SentenceTransformer(embedder_name)
 
-        # Tenders already scored for this project + model version
-        already_resp = (
-            client.table("tender_model_scores")
-            .select("tender_id")
-            .eq("project_id", proj_id)
-            .eq("model_version", model_version)
-            .execute()
-        )
-        already_scored = {row["tender_id"] for row in (already_resp.data or [])}
+        # Tenders already scored for this project + model version (paginated).
+        already_scored: set[int] = set()
+        _as_offset = 0
+        while True:
+            already_resp = (
+                client.table("tender_model_scores")
+                .select("tender_id")
+                .eq("project_id", proj_id)
+                .eq("model_version", model_version)
+                .range(_as_offset, _as_offset + _page_size - 1)
+                .execute()
+            )
+            _as_batch = already_resp.data or []
+            for row in _as_batch:
+                already_scored.add(row["tender_id"])
+            if len(_as_batch) < _page_size:
+                break
+            _as_offset += _page_size
         logger.info("[%s] Already scored: %d tenders", proj_id, len(already_scored))
 
         to_score_ids = active_ids - already_scored

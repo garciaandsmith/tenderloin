@@ -15,9 +15,18 @@ export interface WorkflowStatus {
 /**
  * GET /api/projects/[projectId]/workflow-status
  *
- * Returns the status of the most recent score.yml workflow run.
+ * Returns the status of the most recent score.yml run that was triggered
+ * for this specific project (or a global run with no project_id input).
+ *
+ * Accepts an optional `since` query param (ISO timestamp) to only return
+ * runs created after that time — used by the Refresh button to track the
+ * run it just triggered.
  */
-export async function GET(_request: Request, { params: _params }: Params) {
+export async function GET(request: Request, { params }: Params) {
+  const { projectId } = await params;
+  const { searchParams } = new URL(request.url);
+  const since = searchParams.get("since"); // optional ISO timestamp
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -35,8 +44,9 @@ export async function GET(_request: Request, { params: _params }: Params) {
     );
   }
 
+  // Fetch recent runs — enough to find one matching this project after filtering.
   const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/actions/workflows/score.yml/runs?per_page=1`,
+    `https://api.github.com/repos/${owner}/${repo}/actions/workflows/score.yml/runs?per_page=20`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -52,7 +62,26 @@ export async function GET(_request: Request, { params: _params }: Params) {
   }
 
   const data = await response.json();
-  const run = data.workflow_runs?.[0];
+  const runs: Array<{
+    status: string;
+    conclusion: string | null;
+    updated_at: string;
+    created_at: string;
+    html_url: string;
+    inputs?: Record<string, string> | null;
+  }> = data.workflow_runs ?? [];
+
+  // Find the most recent run that belongs to this project:
+  //   - run.inputs.project_id === projectId  (triggered for this project), OR
+  //   - run.inputs is empty / null            (triggered for all projects, counts for everyone)
+  // If `since` is provided, only consider runs created at or after that timestamp.
+  const sinceDate = since ? new Date(since) : null;
+
+  const run = runs.find((r) => {
+    if (sinceDate && new Date(r.created_at) < sinceDate) return false;
+    const runProjectId = r.inputs?.project_id ?? null;
+    return !runProjectId || runProjectId === projectId;
+  });
 
   if (!run) {
     return NextResponse.json({

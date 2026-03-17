@@ -30,8 +30,11 @@ export default function RescoreButton({ projectId }: Props) {
   const [triggerError, setTriggerError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchStatus = useCallback(async (): Promise<WorkflowStatus | null> => {
-    const res = await fetch(`/api/projects/${projectId}/workflow-status`);
+  const fetchStatus = useCallback(async (since?: string): Promise<WorkflowStatus | null> => {
+    const url = since
+      ? `/api/projects/${projectId}/workflow-status?since=${encodeURIComponent(since)}`
+      : `/api/projects/${projectId}/workflow-status`;
+    const res = await fetch(url);
     if (!res.ok) {
       setStatusError("No se pudo obtener el estado del workflow");
       return null;
@@ -49,10 +52,12 @@ export default function RescoreButton({ projectId }: Props) {
     }
   }, []);
 
+  const sinceRef = useRef<string | undefined>(undefined);
+
   const startPolling = useCallback(() => {
     stopPolling();
     pollRef.current = setInterval(async () => {
-      const status = await fetchStatus();
+      const status = await fetchStatus(sinceRef.current);
       if (status?.status === "completed") {
         stopPolling();
         router.refresh();
@@ -60,30 +65,29 @@ export default function RescoreButton({ projectId }: Props) {
     }, POLL_INTERVAL_MS);
   }, [fetchStatus, stopPolling, router]);
 
-  // On mount: fetch status and start polling if a run is already in progress
+  // On mount: fetch the last known status (no since filter — just for display)
   useEffect(() => {
-    fetchStatus().then((status) => {
-      if (status?.status === "queued" || status?.status === "in_progress") {
-        startPolling();
-      }
-    });
+    fetchStatus();
     return stopPolling;
-  }, [fetchStatus, startPolling, stopPolling]);
+  }, [fetchStatus, stopPolling]);
 
   async function handleRefresh() {
     setTriggering(true);
     setTriggerError(null);
 
     try {
+      const triggerTime = new Date().toISOString();
       const res = await fetch(`/api/projects/${projectId}/refresh`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json();
         setTriggerError(data.error ?? "Error desconocido");
         return;
       }
+      // Store trigger time so polling only tracks runs created after this moment
+      sinceRef.current = triggerTime;
       // Give GitHub a moment to register the run, then start polling
       await new Promise((r) => setTimeout(r, 3_000));
-      await fetchStatus();
+      await fetchStatus(sinceRef.current);
       startPolling();
     } catch {
       setTriggerError("Error de red");

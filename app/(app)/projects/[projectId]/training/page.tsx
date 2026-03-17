@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import {
-  getNextTrainingTender,
+  getTrainingTenderBatch,
   getNextTestTender,
   getScoreDistribution,
   getScoredCount,
@@ -8,7 +8,6 @@ import {
 } from "@/lib/queries/tenders";
 import { getProject } from "@/lib/queries/projects";
 import TrainingCard from "@/components/training/TrainingCard";
-import TrainingCounter from "@/components/training/TrainingCounter";
 import ScoreDistributionChart from "@/components/training/ScoreDistributionChart";
 import TryMeMode from "@/components/training/TryMeMode";
 import ScoreHistoryByCpv from "@/components/training/ScoreHistoryByCpv";
@@ -44,13 +43,13 @@ export default async function TrainingPage({ params, searchParams }: Props) {
   const projectName = project?.name ?? undefined;
 
   // Fetch only what the active tab needs
-  const [nextTender, scoredCount] =
+  const [initialTenders, scoredCount] =
     activeMode === "train"
       ? await Promise.all([
-          getNextTrainingTender(projectId, user!.id),
+          getTrainingTenderBatch(projectId, user!.id),
           getScoredCount(projectId, user!.id),
         ])
-      : [null, 0];
+      : [[], 0];
 
   const testTender =
     activeMode === "test" ? await getNextTestTender(projectId, skipId) : null;
@@ -95,11 +94,15 @@ export default async function TrainingPage({ params, searchParams }: Props) {
         </div>
       </div>
 
-      {/* ENTRENAR: counter + card + reset only */}
+      {/* ENTRENAR: card (includes counter) + reset only */}
       {activeMode === "train" && (
         <>
-          <TrainingCounter count={scoredCount} />
-          <TrainingCard tender={nextTender} projectId={projectId} projectName={projectName} />
+          <TrainingCard
+            initialTenders={initialTenders}
+            initialCount={scoredCount}
+            projectId={projectId}
+            projectName={projectName}
+          />
           <div className="flex justify-center pb-4">
             <ResetTrainingButton projectId={projectId} />
           </div>

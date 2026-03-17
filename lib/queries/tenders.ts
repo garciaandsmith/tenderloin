@@ -94,13 +94,16 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
   });
 }
 
-/** Fetch the next unscored tender for the training queue.
- *  Returns tenders matching the project's hard filters that have NOT yet been
- *  scored by this user in the current training session. */
-export async function getNextTrainingTender(
+/** Fetch a batch of unscored tenders for the training queue.
+ *  Returns up to `limit` tenders matching the project's hard filters that have
+ *  NOT yet been scored by this user in the current training session, and are
+ *  not in the provided `excludeIds` list. */
+export async function getTrainingTenderBatch(
   projectId: string,
-  userId: string
-): Promise<TrainingTender | null> {
+  userId: string,
+  excludeIds: number[] = [],
+  limit = 10
+): Promise<TrainingTender[]> {
   const supabase = await createClient();
   const [filters, trainingSession] = await Promise.all([
     getProjectFilters(projectId),
@@ -115,25 +118,24 @@ export async function getNextTrainingTender(
     .eq("training_session", trainingSession);
 
   const scoredIds = (scoredRows ?? []).map((r) => r.tender_id);
+  const allExcluded = [...new Set([...scoredIds, ...excludeIds])];
 
   let query = supabase
     .from("tenders_raw")
     .select("id, title, summary, link, buyer_name, budget_amount, published_at, deadline_at, cpv, region, contract_type, procedure_type")
     .order("deadline_at", { ascending: true, nullsFirst: false })
     .order("published_at", { ascending: false })
-    .limit(1);
+    .limit(limit);
 
   query = applyHardFilters(query, filters);
 
-  if (scoredIds.length > 0) {
-    query = query.not("id", "in", `(${scoredIds.join(",")})`);
+  if (allExcluded.length > 0) {
+    query = query.not("id", "in", `(${allExcluded.join(",")})`);
   }
 
   const { data, error } = await query;
   if (error) throw error;
-  if (!data || data.length === 0) return null;
-
-  return data[0] as TrainingTender;
+  return (data ?? []) as TrainingTender[];
 }
 
 /** Fetch the score distribution (count per score 0-5) for a project and user,

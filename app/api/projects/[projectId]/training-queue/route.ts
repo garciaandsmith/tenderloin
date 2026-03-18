@@ -25,6 +25,6 @@ export async function GET(
     : [];
   const limit = limitParam ? Math.min(Math.max(1, Number(limitParam)), 20) : 10;
 
-  const tenders = await getTrainingTenderBatch(projectId, user.id, excludeIds, limit);
+  const tenders = await getTrainingTenderBatch(projectId, excludeIds, limit);
   return NextResponse.json({ tenders });
 }

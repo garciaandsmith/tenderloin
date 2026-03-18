@@ -96,11 +96,10 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
 
 /** Fetch a batch of unscored tenders for the training queue.
  *  Returns up to `limit` tenders matching the project's hard filters that have
- *  NOT yet been scored by this user in the current training session, and are
+ *  NOT yet been scored by ANY user in the current training session, and are
  *  not in the provided `excludeIds` list. */
 export async function getTrainingTenderBatch(
   projectId: string,
-  userId: string,
   excludeIds: number[] = [],
   limit = 10
 ): Promise<TrainingTender[]> {
@@ -114,7 +113,6 @@ export async function getTrainingTenderBatch(
     .from("tender_scores")
     .select("tender_id")
     .eq("project_id", projectId)
-    .eq("scored_by", userId)
     .eq("training_session", trainingSession);
 
   const scoredIds = (scoredRows ?? []).map((r) => r.tender_id);
@@ -138,9 +136,9 @@ export async function getTrainingTenderBatch(
   return (data ?? []) as TrainingTender[];
 }
 
-/** Fetch the score distribution (count per score 0-5) for a project and user,
- *  scoped to the current training session. */
-export async function getScoreDistribution(projectId: string, userId: string): Promise<ScoreDistribution[]> {
+/** Fetch the score distribution (count per score 0-5) for a project,
+ *  aggregated across all users in the current training session. */
+export async function getScoreDistribution(projectId: string): Promise<ScoreDistribution[]> {
   const supabase = await createClient();
   const trainingSession = await getTrainingSession(projectId);
 
@@ -148,7 +146,6 @@ export async function getScoreDistribution(projectId: string, userId: string): P
     .from("tender_scores")
     .select("*")
     .eq("project_id", projectId)
-    .eq("scored_by", userId)
     .eq("training_session", trainingSession);
 
   if (error) throw error;
@@ -164,8 +161,8 @@ export async function getScoreDistribution(projectId: string, userId: string): P
   }));
 }
 
-/** Count total tenders scored by the current user in the current training session. */
-export async function getScoredCount(projectId: string, userId: string): Promise<number> {
+/** Count total tenders scored by all users in the current training session for a project. */
+export async function getScoredCount(projectId: string): Promise<number> {
   const supabase = await createClient();
   const trainingSession = await getTrainingSession(projectId);
 
@@ -173,7 +170,6 @@ export async function getScoredCount(projectId: string, userId: string): Promise
     .from("tender_scores")
     .select("*", { count: "exact", head: true })
     .eq("project_id", projectId)
-    .eq("scored_by", userId)
     .eq("training_session", trainingSession);
 
   if (error) throw error;
@@ -221,11 +217,10 @@ export async function getNextTestTender(
   };
 }
 
-/** Fetch all scored tenders for a project+user in the current training session.
- *  Used in the Historial tab to browse scores by CPV and other filters. */
+/** Fetch all scored tenders for a project in the current training session,
+ *  across all users. Used in the Historial tab. */
 export async function getScoredTenders(
-  projectId: string,
-  userId: string
+  projectId: string
 ): Promise<ScoredTenderEntry[]> {
   const supabase = await createClient();
   const trainingSession = await getTrainingSession(projectId);
@@ -234,7 +229,6 @@ export async function getScoredTenders(
     .from("tender_scores")
     .select("tender_id, score, scored_at, tenders_raw ( title, cpv, region )")
     .eq("project_id", projectId)
-    .eq("scored_by", userId)
     .eq("training_session", trainingSession)
     .order("scored_at", { ascending: false });
 

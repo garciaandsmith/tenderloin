@@ -70,6 +70,8 @@ export default async function PipelinePage({ searchParams }: Props) {
 
   const isAdmin = profile?.role === "admin";
 
+  if (!isAdmin) redirect("/home");
+
   // Pipeline status
   const [{ data: stateRow }, { count: totalTenders }] = await Promise.all([
     supabase

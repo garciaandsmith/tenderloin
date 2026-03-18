@@ -30,7 +30,7 @@ export default async function AdminProjectDetailPage({ params }: Props) {
     .eq("id", user!.id)
     .single();
 
-  if (profile?.role !== "admin") redirect("/pipeline");
+  if (profile?.role !== "admin") redirect("/home");
 
   const [project, members] = await Promise.all([
     getProject(projectId),

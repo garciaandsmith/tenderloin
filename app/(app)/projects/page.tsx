@@ -18,7 +18,7 @@ export default async function ProjectsPage() {
     .eq("id", user!.id)
     .single();
 
-  if (profile?.role !== "admin") redirect("/pipeline");
+  if (profile?.role !== "admin") redirect("/home");
 
   const projects = await getUserProjects();
 

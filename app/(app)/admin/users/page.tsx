@@ -18,7 +18,7 @@ export default async function AdminUsersPage() {
     .eq("id", user!.id)
     .single();
 
-  if (profile?.role !== "admin") redirect("/pipeline");
+  if (profile?.role !== "admin") redirect("/home");
 
   const admin = await createAdminClient();
   const { data: users } = await admin

@@ -69,7 +69,7 @@ export default async function TrainingPage({ params, searchParams }: Props) {
   ];
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold">Entrenamiento del modelo</h1>

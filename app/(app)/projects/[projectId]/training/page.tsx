@@ -46,8 +46,8 @@ export default async function TrainingPage({ params, searchParams }: Props) {
   const [initialTenders, scoredCount] =
     activeMode === "train"
       ? await Promise.all([
-          getTrainingTenderBatch(projectId, user!.id),
-          getScoredCount(projectId, user!.id),
+          getTrainingTenderBatch(projectId),
+          getScoredCount(projectId),
         ])
       : [[], 0];
 
@@ -57,8 +57,8 @@ export default async function TrainingPage({ params, searchParams }: Props) {
   const [distribution, scoredTenders] =
     activeMode === "history"
       ? await Promise.all([
-          getScoreDistribution(projectId, user!.id),
-          getScoredTenders(projectId, user!.id),
+          getScoreDistribution(projectId),
+          getScoredTenders(projectId),
         ])
       : [null, null];
 

@@ -22,7 +22,7 @@ export function middleware(request: NextRequest) {
   // Redirect authenticated users away from the login page
   if (hasSession && pathname === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/pipeline";
+    url.pathname = "/home";
     return NextResponse.redirect(url);
   }
 

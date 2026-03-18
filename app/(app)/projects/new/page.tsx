@@ -16,7 +16,7 @@ export default async function NewProjectPage() {
     .eq("id", user!.id)
     .single();
 
-  if (profile?.role !== "admin") redirect("/pipeline");
+  if (profile?.role !== "admin") redirect("/home");
 
   return (
     <div className="max-w-2xl mx-auto">

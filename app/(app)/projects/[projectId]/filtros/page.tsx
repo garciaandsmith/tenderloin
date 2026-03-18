@@ -44,7 +44,6 @@ export default async function ProjectFiltrosPage({ params }: Props) {
       <ProjectFiltersForm
         projectId={projectId}
         initialFilters={filters}
-        readOnly={!isAdmin}
       />
     </div>
   );

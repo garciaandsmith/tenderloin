@@ -30,10 +30,20 @@ export async function PUT(request: Request, { params }: Params) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("*")
+    .select("role")
     .eq("id", user.id)
     .single();
-  if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  // Admins can update any project's filters; regular users must be a project member.
+  if (profile?.role !== "admin") {
+    const { data: membership } = await supabase
+      .from("project_members")
+      .select("project_id")
+      .eq("project_id", projectId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const body = await request.json();
 

@@ -9,6 +9,7 @@ import type { TrainingTender } from "@/lib/types/app.types";
 
 const FETCH_MORE_THRESHOLD = 3;
 const BATCH_SIZE = 10;
+const CARDS_VISIBLE = 3;
 
 interface Props {
   initialTenders: TrainingTender[];
@@ -25,8 +26,8 @@ export default function TrainingCard({
 }: Props) {
   const [queue, setQueue] = useState<TrainingTender[]>(initialTenders);
   const [scoredCount, setScoredCount] = useState(initialCount);
-  const [scoring, setScoring] = useState(false);
-  const [selected, setSelected] = useState<number | null>(null);
+  const [scoringIds, setScoringIds] = useState<Set<number>>(new Set());
+  const [selectedScores, setSelectedScores] = useState<Map<number, number>>(new Map());
   // If the server returned a full batch, there may be more; otherwise we already have everything.
   const [hasMore, setHasMore] = useState(initialTenders.length >= BATCH_SIZE);
   const [isFetching, setIsFetching] = useState(false);
@@ -76,29 +77,37 @@ export default function TrainingCard({
     }
   }, [queue.length, hasMore, isFetching, fetchMore]);
 
-  async function handleScore(score: number) {
-    const current = queue[0];
-    if (!current || scoring) return;
+  async function handleScore(tenderId: number, score: number) {
+    if (scoringIds.has(tenderId)) return;
 
-    setSelected(score);
-    setScoring(true);
+    setScoringIds((prev) => new Set(prev).add(tenderId));
+    setSelectedScores((prev) => new Map(prev).set(tenderId, score));
 
-    await fetch(`/api/tenders/${current.id}/score`, {
+    await fetch(`/api/tenders/${tenderId}/score`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, score }),
     });
 
-    // Brief pause so the selection is visible, then immediately advance
+    // Brief pause so the selection is visible, then remove this card
     await new Promise((r) => setTimeout(r, 300));
-    setQueue((prev) => prev.slice(1));
+    setQueue((prev) => prev.filter((t) => t.id !== tenderId));
     setScoredCount((c) => c + 1);
-    setScoring(false);
-    setSelected(null);
+    setScoringIds((prev) => {
+      const next = new Set(prev);
+      next.delete(tenderId);
+      return next;
+    });
+    setSelectedScores((prev) => {
+      const next = new Map(prev);
+      next.delete(tenderId);
+      return next;
+    });
   }
 
-  const current = queue[0] ?? null;
-  const isExhausted = !current && !hasMore && !isFetching;
+  const visibleCards = queue.slice(0, CARDS_VISIBLE);
+  const isExhausted = queue.length === 0 && !hasMore && !isFetching;
+  const isLoading = queue.length === 0 && (hasMore || isFetching);
 
   return (
     <div className="space-y-4">
@@ -112,79 +121,88 @@ export default function TrainingCard({
             Vuelve más tarde cuando haya nuevas licitaciones capturadas.
           </p>
         </div>
-      ) : !current ? (
+      ) : isLoading ? (
         <div className="rounded-lg border bg-card p-8 text-center">
           <p className="text-sm text-muted-foreground animate-pulse">Cargando licitaciones…</p>
         </div>
       ) : (
-        <div className="rounded-lg border bg-card overflow-hidden">
-          {/* Tender content */}
-          <div className="p-6 space-y-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <h2 className="font-semibold leading-snug">{current.title}</h2>
-                <p className="text-sm text-muted-foreground mt-1">{current.buyer_name}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {visibleCards.map((tender) => {
+            const isScoring = scoringIds.has(tender.id);
+            const selected = selectedScores.get(tender.id) ?? null;
+            return (
+              <div key={tender.id} className="rounded-lg border bg-card overflow-hidden flex flex-col">
+                {/* Tender content */}
+                <div className="p-4 space-y-3 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <h2 className="font-semibold leading-snug text-sm">{tender.title}</h2>
+                      <p className="text-xs text-muted-foreground mt-1">{tender.buyer_name}</p>
+                    </div>
+                    <div className="shrink-0 flex flex-col items-end gap-1">
+                      {tender.budget_amount && (
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {formatBudget(tender.budget_amount)}
+                        </span>
+                      )}
+                      <a
+                        href={tender.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary underline underline-offset-4 hover:text-primary/80 whitespace-nowrap"
+                      >
+                        Ver ↗
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Filter metadata tags */}
+                  <div className="flex flex-wrap gap-1">
+                    {tender.cpv && (
+                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs bg-muted text-muted-foreground">
+                        {cpvLabel(tender.cpv)}
+                      </span>
+                    )}
+                    {tender.region && (
+                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs bg-muted text-muted-foreground">
+                        {tender.region}
+                      </span>
+                    )}
+                    {tender.contract_type && (
+                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs bg-muted text-muted-foreground capitalize">
+                        {tender.contract_type}
+                      </span>
+                    )}
+                    {tender.procedure_type && (
+                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs bg-muted text-muted-foreground capitalize">
+                        {tender.procedure_type}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs leading-relaxed text-muted-foreground line-clamp-5">
+                    {tender.summary}
+                  </p>
+                </div>
+
+                {/* Scoring */}
+                <div className="border-t bg-muted/30 px-4 py-3">
+                  <ScoreButtons
+                    onScore={(score) => handleScore(tender.id, score)}
+                    disabled={isScoring}
+                    selected={selected}
+                    projectName={projectName}
+                    compact
+                  />
+                  {isScoring && (
+                    <p className="text-center text-xs text-muted-foreground mt-2 animate-pulse">
+                      Guardando…
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                {current.budget_amount && (
-                  <span className="text-sm font-medium text-muted-foreground">
-                    {formatBudget(current.budget_amount)}
-                  </span>
-                )}
-                <a
-                  href={current.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-primary underline underline-offset-4 hover:text-primary/80 whitespace-nowrap"
-                >
-                  Ver licitación oficial ↗
-                </a>
-              </div>
-            </div>
-
-            {/* Filter metadata tags */}
-            <div className="flex flex-wrap gap-1.5">
-              {current.cpv && (
-                <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
-                  {cpvLabel(current.cpv)}
-                </span>
-              )}
-              {current.region && (
-                <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
-                  {current.region}
-                </span>
-              )}
-              {current.contract_type && (
-                <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground capitalize">
-                  {current.contract_type}
-                </span>
-              )}
-              {current.procedure_type && (
-                <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground capitalize">
-                  {current.procedure_type}
-                </span>
-              )}
-            </div>
-
-            <p className="text-sm leading-relaxed text-muted-foreground line-clamp-6">
-              {current.summary}
-            </p>
-          </div>
-
-          {/* Scoring */}
-          <div className="border-t bg-muted/30 px-6 py-4">
-            <ScoreButtons
-              onScore={handleScore}
-              disabled={scoring}
-              selected={selected}
-              projectName={projectName}
-            />
-            {scoring && (
-              <p className="text-center text-xs text-muted-foreground mt-3 animate-pulse">
-                Guardando puntuación…
-              </p>
-            )}
-          </div>
+            );
+          })}
         </div>
       )}
     </div>

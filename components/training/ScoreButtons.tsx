@@ -5,6 +5,7 @@ interface Props {
   disabled?: boolean;
   selected?: number | null;
   projectName?: string;
+  compact?: boolean;
 }
 
 const SCORES = [
@@ -16,13 +17,13 @@ const SCORES = [
   { value: 5, label: "5", hint: "EXCELENTE", color: "bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200" },
 ];
 
-export default function ScoreButtons({ onScore, disabled = false, selected, projectName }: Props) {
+export default function ScoreButtons({ onScore, disabled = false, selected, projectName, compact = false }: Props) {
   return (
     <div>
       <p className="text-xs text-muted-foreground mb-2 text-center">
         ¿Qué relevancia tiene esta licitación para {projectName ?? "este proyecto"}?
       </p>
-      <div className="flex gap-2 justify-center">
+      <div className="flex gap-1.5 justify-center">
         {SCORES.map((s) => (
           <button
             key={s.value}
@@ -30,12 +31,13 @@ export default function ScoreButtons({ onScore, disabled = false, selected, proj
             onClick={() => onScore(s.value)}
             disabled={disabled}
             title={s.hint}
-            className={`flex flex-col items-center rounded-lg border px-4 py-3 text-sm font-bold transition-all
+            className={`flex flex-col items-center rounded-lg border font-bold transition-all
+              ${compact ? "px-2 py-1.5 text-xs" : "px-4 py-3 text-sm"}
               ${s.color}
               ${selected === s.value ? "ring-2 ring-offset-1 ring-current scale-105" : ""}
               disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            <span className="text-xl">{s.label}</span>
+            <span className={compact ? "text-base" : "text-xl"}>{s.label}</span>
             <span className="text-xs font-normal mt-0.5">{s.hint}</span>
           </button>
         ))}

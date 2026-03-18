@@ -27,15 +27,19 @@ export default function TrainingCard({
   const [scoredCount, setScoredCount] = useState(initialCount);
   const [scoring, setScoring] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const loadingRef = useRef(false);
+  // If the server returned a full batch, there may be more; otherwise we already have everything.
+  const [hasMore, setHasMore] = useState(initialTenders.length >= BATCH_SIZE);
+  const [isFetching, setIsFetching] = useState(false);
 
   // Track all tender IDs we've ever seen so we don't re-fetch them
   const seenIds = useRef<Set<number>>(new Set(initialTenders.map((t) => t.id)));
+  // Ref-based lock prevents concurrent fetches without adding to useCallback deps
+  const fetchingRef = useRef(false);
 
   const fetchMore = useCallback(async () => {
-    if (loadingRef.current || !hasMore) return;
-    loadingRef.current = true;
+    if (fetchingRef.current || !hasMore) return;
+    fetchingRef.current = true;
+    setIsFetching(true);
 
     const excludeParam = Array.from(seenIds.current).join(",");
     const url =
@@ -44,7 +48,10 @@ export default function TrainingCard({
 
     try {
       const res = await fetch(url);
-      if (!res.ok) return;
+      if (!res.ok) {
+        setHasMore(false);
+        return;
+      }
       const { tenders } = (await res.json()) as { tenders: TrainingTender[] };
 
       if (tenders.length === 0) {
@@ -54,17 +61,20 @@ export default function TrainingCard({
         setQueue((prev) => [...prev, ...tenders]);
         if (tenders.length < BATCH_SIZE) setHasMore(false);
       }
+    } catch {
+      setHasMore(false);
     } finally {
-      loadingRef.current = false;
+      fetchingRef.current = false;
+      setIsFetching(false);
     }
   }, [projectId, hasMore]);
 
   // Pre-fetch more whenever the queue runs low
   useEffect(() => {
-    if (queue.length <= FETCH_MORE_THRESHOLD && hasMore) {
+    if (queue.length <= FETCH_MORE_THRESHOLD && hasMore && !isFetching) {
       fetchMore();
     }
-  }, [queue.length, hasMore, fetchMore]);
+  }, [queue.length, hasMore, isFetching, fetchMore]);
 
   async function handleScore(score: number) {
     const current = queue[0];
@@ -88,7 +98,7 @@ export default function TrainingCard({
   }
 
   const current = queue[0] ?? null;
-  const isExhausted = !current && !hasMore && !loadingRef.current;
+  const isExhausted = !current && !hasMore && !isFetching;
 
   return (
     <div className="space-y-4">

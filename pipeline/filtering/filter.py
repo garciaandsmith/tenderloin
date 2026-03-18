@@ -9,6 +9,7 @@ processed, so incremental daily runs are cheap.
 """
 from __future__ import annotations
 
+import datetime
 import logging
 from typing import Any
 
@@ -76,15 +77,25 @@ def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
     )
     filter_cfg: dict = filters_resp.data or {}
 
-    # Tenders already evaluated for this project
-    already_resp = (
-        client.table("tender_filter_results")
-        .select("tender_id")
-        .eq("project_id", project_id)
-        .execute()
-    )
-    already_evaluated = {row["tender_id"] for row in (already_resp.data or [])}
+    # Tenders already evaluated for this project — paginate to avoid 1000-row cap
+    already_evaluated: set[int] = set()
+    _ae_offset = 0
+    while True:
+        already_resp = (
+            client.table("tender_filter_results")
+            .select("tender_id")
+            .eq("project_id", project_id)
+            .range(_ae_offset, _ae_offset + batch_size - 1)
+            .execute()
+        )
+        ae_rows = already_resp.data or []
+        already_evaluated.update(row["tender_id"] for row in ae_rows)
+        if len(ae_rows) < batch_size:
+            break
+        _ae_offset += batch_size
     logger.info("[%s] Already evaluated: %d tenders", project_id, len(already_evaluated))
+
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     offset = 0
     total_written = 0
@@ -96,6 +107,7 @@ def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
                 "id, title, summary, region, cpv, budget_amount, "
                 "contract_type, procedure_type, lot_count, duration_months, buyer_type"
             )
+            .gt("deadline_at", now_iso)
             .range(offset, offset + batch_size - 1)
             .execute()
         )

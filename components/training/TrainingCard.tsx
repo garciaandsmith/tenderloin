@@ -9,7 +9,27 @@ import type { TrainingTender } from "@/lib/types/app.types";
 
 const FETCH_MORE_THRESHOLD = 3;
 const BATCH_SIZE = 10;
-const CARDS_VISIBLE = 3;
+const SLOTS = 5;
+
+type SlotData =
+  | { status: "filled"; tender: TrainingTender }
+  | { status: "processing"; tender: TrainingTender; score: number }
+  | { status: "loading" }
+  | { status: "empty" };
+
+const SCORE_COLORS: Record<number, string> = {
+  0: "bg-gray-100 text-gray-600 ring-gray-300",
+  1: "bg-red-50 text-red-700 ring-red-300",
+  2: "bg-orange-50 text-orange-700 ring-orange-300",
+  3: "bg-yellow-50 text-yellow-700 ring-yellow-300",
+  4: "bg-green-50 text-green-700 ring-green-300",
+  5: "bg-blue-50 text-blue-700 ring-blue-300",
+};
+
+const SCORE_LABELS: Record<number, string> = {
+  0: "REVISAR", 1: "NULA", 2: "ESCASA",
+  3: "SUFICIENTE", 4: "BUENA", 5: "EXCELENTE",
+};
 
 interface Props {
   initialTenders: TrainingTender[];
@@ -24,18 +44,26 @@ export default function TrainingCard({
   projectId,
   projectName,
 }: Props) {
-  const [queue, setQueue] = useState<TrainingTender[]>(initialTenders);
+  const [slots, setSlots] = useState<SlotData[]>(() =>
+    Array.from({ length: SLOTS }, (_, i) =>
+      initialTenders[i]
+        ? { status: "filled", tender: initialTenders[i] }
+        : { status: "empty" }
+    )
+  );
+  const [queue, setQueue] = useState<TrainingTender[]>(initialTenders.slice(SLOTS));
   const [scoredCount, setScoredCount] = useState(initialCount);
-  const [scoringIds, setScoringIds] = useState<Set<number>>(new Set());
-  const [selectedScores, setSelectedScores] = useState<Map<number, number>>(new Map());
-  // If the server returned a full batch, there may be more; otherwise we already have everything.
   const [hasMore, setHasMore] = useState(initialTenders.length >= BATCH_SIZE);
   const [isFetching, setIsFetching] = useState(false);
 
-  // Track all tender IDs we've ever seen so we don't re-fetch them
   const seenIds = useRef<Set<number>>(new Set(initialTenders.map((t) => t.id)));
-  // Ref-based lock prevents concurrent fetches without adding to useCallback deps
   const fetchingRef = useRef(false);
+  // Refs so async handlers always read the latest values without stale closures
+  const queueRef = useRef<TrainingTender[]>(initialTenders.slice(SLOTS));
+  const hasMoreRef = useRef(initialTenders.length >= BATCH_SIZE);
+
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { hasMoreRef.current = hasMore; }, [hasMore]);
 
   const fetchMore = useCallback(async () => {
     if (fetchingRef.current || !hasMore) return;
@@ -57,13 +85,38 @@ export default function TrainingCard({
 
       if (tenders.length === 0) {
         setHasMore(false);
+        // Any loading slots become empty
+        setSlots((prev) =>
+          prev.map((s) => (s.status === "loading" ? { status: "empty" } : s))
+        );
       } else {
         for (const t of tenders) seenIds.current.add(t.id);
-        setQueue((prev) => [...prev, ...tenders]);
         if (tenders.length < BATCH_SIZE) setHasMore(false);
+
+        // Fill loading slots first, put the rest in the queue
+        setSlots((prev) => {
+          let idx = 0;
+          const next = prev.map((slot) =>
+            slot.status === "loading" && idx < tenders.length
+              ? { status: "filled" as const, tender: tenders[idx++] }
+              : slot
+          );
+          const leftover = tenders.slice(idx);
+          if (leftover.length > 0) {
+            setQueue((q) => {
+              const updated = [...q, ...leftover];
+              queueRef.current = updated;
+              return updated;
+            });
+          }
+          return next;
+        });
       }
     } catch {
       setHasMore(false);
+      setSlots((prev) =>
+        prev.map((s) => (s.status === "loading" ? { status: "empty" } : s))
+      );
     } finally {
       fetchingRef.current = false;
       setIsFetching(false);
@@ -77,37 +130,53 @@ export default function TrainingCard({
     }
   }, [queue.length, hasMore, isFetching, fetchMore]);
 
-  async function handleScore(tenderId: number, score: number) {
-    if (scoringIds.has(tenderId)) return;
+  async function handleScore(slotIndex: number, tenderId: number, score: number) {
+    const slot = slots[slotIndex];
+    if (slot.status !== "filled") return;
 
-    setScoringIds((prev) => new Set(prev).add(tenderId));
-    setSelectedScores((prev) => new Map(prev).set(tenderId, score));
+    // 1. Show processing overlay on this slot
+    setSlots((prev) =>
+      prev.map((s, i) =>
+        i === slotIndex ? { status: "processing", tender: slot.tender, score } : s
+      )
+    );
 
+    // 2. Save score
     await fetch(`/api/tenders/${tenderId}/score`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, score }),
     });
 
-    // Brief pause so the selection is visible, then remove this card
+    // 3. Brief pause so the selected score is visible in the overlay
     await new Promise((r) => setTimeout(r, 300));
-    setQueue((prev) => prev.filter((t) => t.id !== tenderId));
     setScoredCount((c) => c + 1);
-    setScoringIds((prev) => {
-      const next = new Set(prev);
-      next.delete(tenderId);
-      return next;
-    });
-    setSelectedScores((prev) => {
-      const next = new Map(prev);
-      next.delete(tenderId);
-      return next;
-    });
+
+    // 4. Transition slot: fill from queue, or go to loading/empty
+    const next = queueRef.current[0];
+    if (next) {
+      const remaining = queueRef.current.slice(1);
+      queueRef.current = remaining;
+      setQueue(remaining);
+      setSlots((prev) =>
+        prev.map((s, i) =>
+          i === slotIndex ? { status: "filled", tender: next } : s
+        )
+      );
+    } else if (hasMoreRef.current) {
+      setSlots((prev) =>
+        prev.map((s, i) => (i === slotIndex ? { status: "loading" } : s))
+      );
+      fetchMore();
+    } else {
+      setSlots((prev) =>
+        prev.map((s, i) => (i === slotIndex ? { status: "empty" } : s))
+      );
+    }
   }
 
-  const visibleCards = queue.slice(0, CARDS_VISIBLE);
-  const isExhausted = queue.length === 0 && !hasMore && !isFetching;
-  const isLoading = queue.length === 0 && (hasMore || isFetching);
+  const isExhausted =
+    slots.every((s) => s.status === "empty") && !hasMore && !isFetching;
 
   return (
     <div className="space-y-4">
@@ -121,85 +190,128 @@ export default function TrainingCard({
             Vuelve más tarde cuando haya nuevas licitaciones capturadas.
           </p>
         </div>
-      ) : isLoading ? (
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <p className="text-sm text-muted-foreground animate-pulse">Cargando licitaciones…</p>
-        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {visibleCards.map((tender) => {
-            const isScoring = scoringIds.has(tender.id);
-            const selected = selectedScores.get(tender.id) ?? null;
-            return (
-              <div key={tender.id} className="rounded-lg border bg-card overflow-hidden flex flex-col">
-                {/* Tender content */}
-                <div className="p-4 space-y-3 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <h2 className="font-semibold leading-snug text-sm">{tender.title}</h2>
-                      <p className="text-xs text-muted-foreground mt-1">{tender.buyer_name}</p>
+        <div className="space-y-3">
+          {slots.map((slot, i) => {
+            if (slot.status === "empty") return null;
+
+            if (slot.status === "loading") {
+              return (
+                <div
+                  key={`slot-loading-${i}`}
+                  className="rounded-lg border bg-card overflow-hidden animate-pulse"
+                >
+                  <div className="p-6 space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-muted rounded w-3/4" />
+                        <div className="h-3 bg-muted rounded w-1/2" />
+                      </div>
+                      <div className="h-3 bg-muted rounded w-20" />
                     </div>
-                    <div className="shrink-0 flex flex-col items-end gap-1">
-                      {tender.budget_amount && (
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {formatBudget(tender.budget_amount)}
+                    <div className="flex gap-1.5">
+                      <div className="h-5 bg-muted rounded w-24" />
+                      <div className="h-5 bg-muted rounded w-16" />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-3 bg-muted rounded w-full" />
+                      <div className="h-3 bg-muted rounded w-11/12" />
+                      <div className="h-3 bg-muted rounded w-4/5" />
+                      <div className="h-3 bg-muted rounded w-5/6" />
+                    </div>
+                  </div>
+                  <div className="border-t bg-muted/30 px-6 py-4">
+                    <div className="h-14 bg-muted rounded" />
+                  </div>
+                </div>
+              );
+            }
+
+            // "filled" and "processing" share the same card layout
+            const tender = slot.tender;
+            const isProcessing = slot.status === "processing";
+
+            return (
+              <div
+                key={tender.id}
+                className="relative rounded-lg border bg-card overflow-hidden"
+              >
+                {/* Card content — dims when processing */}
+                <div className={isProcessing ? "opacity-40 pointer-events-none select-none" : ""}>
+                  <div className="p-6 space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <h2 className="font-semibold leading-snug">{tender.title}</h2>
+                        <p className="text-sm text-muted-foreground mt-1">{tender.buyer_name}</p>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        {tender.budget_amount && (
+                          <span className="text-sm font-medium text-muted-foreground">
+                            {formatBudget(tender.budget_amount)}
+                          </span>
+                        )}
+                        <a
+                          href={tender.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary underline underline-offset-4 hover:text-primary/80 whitespace-nowrap"
+                        >
+                          Ver licitación oficial ↗
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {tender.cpv && (
+                        <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
+                          {cpvLabel(tender.cpv)}
                         </span>
                       )}
-                      <a
-                        href={tender.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary underline underline-offset-4 hover:text-primary/80 whitespace-nowrap"
-                      >
-                        Ver ↗
-                      </a>
+                      {tender.region && (
+                        <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
+                          {tender.region}
+                        </span>
+                      )}
+                      {tender.contract_type && (
+                        <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground capitalize">
+                          {tender.contract_type}
+                        </span>
+                      )}
+                      {tender.procedure_type && (
+                        <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground capitalize">
+                          {tender.procedure_type}
+                        </span>
+                      )}
                     </div>
-                  </div>
 
-                  {/* Filter metadata tags */}
-                  <div className="flex flex-wrap gap-1">
-                    {tender.cpv && (
-                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs bg-muted text-muted-foreground">
-                        {cpvLabel(tender.cpv)}
-                      </span>
-                    )}
-                    {tender.region && (
-                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs bg-muted text-muted-foreground">
-                        {tender.region}
-                      </span>
-                    )}
-                    {tender.contract_type && (
-                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs bg-muted text-muted-foreground capitalize">
-                        {tender.contract_type}
-                      </span>
-                    )}
-                    {tender.procedure_type && (
-                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs bg-muted text-muted-foreground capitalize">
-                        {tender.procedure_type}
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-xs leading-relaxed text-muted-foreground line-clamp-5">
-                    {tender.summary}
-                  </p>
-                </div>
-
-                {/* Scoring */}
-                <div className="border-t bg-muted/30 px-4 py-3">
-                  <ScoreButtons
-                    onScore={(score) => handleScore(tender.id, score)}
-                    disabled={isScoring}
-                    selected={selected}
-                    projectName={projectName}
-                    compact
-                  />
-                  {isScoring && (
-                    <p className="text-center text-xs text-muted-foreground mt-2 animate-pulse">
-                      Guardando…
+                    <p className="text-sm leading-relaxed text-muted-foreground line-clamp-4">
+                      {tender.summary}
                     </p>
-                  )}
+                  </div>
+
+                  <div className="border-t bg-muted/30 px-6 py-4">
+                    <ScoreButtons
+                      onScore={(score) => handleScore(i, tender.id, score)}
+                      disabled={isProcessing}
+                      projectName={projectName}
+                    />
+                  </div>
                 </div>
+
+                {/* Processing overlay */}
+                {isProcessing && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/60 backdrop-blur-[2px]">
+                    <div
+                      className={`flex flex-col items-center rounded-xl px-8 py-4 ring-2 ${SCORE_COLORS[slot.score]}`}
+                    >
+                      <span className="text-4xl font-bold">{slot.score}</span>
+                      <span className="text-sm font-semibold mt-1 tracking-wide">
+                        {SCORE_LABELS[slot.score]}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground animate-pulse">Guardando…</p>
+                  </div>
+                )}
               </div>
             );
           })}

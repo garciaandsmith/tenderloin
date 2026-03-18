@@ -9,7 +9,6 @@ import { Inbox, Star, CheckCircle } from "lucide-react";
 interface Props {
   tenders: InboxTender[];
   projectId: string;
-  isAdmin?: boolean;
 }
 
 type Tab = "all" | "starred" | "processed";
@@ -27,7 +26,7 @@ function getFavoritesKey(projectId: string) {
   return `inbox_favorites_${projectId}`;
 }
 
-export default function InboxList({ tenders, projectId, isAdmin }: Props) {
+export default function InboxList({ tenders, projectId }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [minScore, setMinScore] = useState(0);
   const [maxScore, setMaxScore] = useState(5);
@@ -124,11 +123,9 @@ export default function InboxList({ tenders, projectId, isAdmin }: Props) {
           count={processedCount}
         />
       </div>
-      {isAdmin && (
-        <div className="pb-2">
-          <RescoreButton projectId={projectId} />
-        </div>
-      )}
+      <div className="pb-2">
+        <RescoreButton projectId={projectId} />
+      </div>
       </div>
 
       {/* Score filter */}

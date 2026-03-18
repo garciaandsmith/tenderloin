@@ -29,7 +29,16 @@ export async function POST(_request: Request, { params }: Params) {
     .select("role")
     .eq("id", user.id)
     .single();
-  if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  if (profile?.role !== "admin") {
+    const { data: membership } = await supabase
+      .from("project_members")
+      .select("project_id")
+      .eq("project_id", projectId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Clear existing model scores for this project so the scoring pipeline
   // re-evaluates all active tenders with the freshly trained model.

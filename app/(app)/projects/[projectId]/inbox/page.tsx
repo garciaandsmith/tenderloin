@@ -18,12 +18,7 @@ export default async function InboxPage({ params }: Props) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [tenders, profileResult] = await Promise.all([
-    getInboxTenders(projectId),
-    supabase.from("profiles").select("role").eq("id", user.id).single(),
-  ]);
+  const tenders = await getInboxTenders(projectId);
 
-  const isAdmin = profileResult.data?.role === "admin";
-
-  return <InboxList tenders={tenders} projectId={projectId} isAdmin={isAdmin} />;
+  return <InboxList tenders={tenders} projectId={projectId} />;
 }

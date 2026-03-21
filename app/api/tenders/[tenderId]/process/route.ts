@@ -72,13 +72,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Error al crear el análisis" }, { status: 500 });
   }
 
-  // Dispatch the analysis workflow immediately (best-effort — don't fail the request if GitHub is unreachable)
+  // Dispatch the analysis workflow
   const token = process.env.GITHUB_TOKEN;
   const owner = process.env.GITHUB_OWNER;
   const repo = process.env.GITHUB_REPO;
 
-  if (token && owner && repo) {
-    await fetch(
+  async function revertToError(message: string) {
+    await supabase
+      .from("tender_analysis")
+      .update({ status: "error", raw_llm_output: { error: message } })
+      .eq("tender_id", tenderIdNum)
+      .eq("analysis_type", analysisType);
+  }
+
+  if (!token || !owner || !repo) {
+    const msg = "GitHub workflow env vars (GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO) are not set.";
+    console.error(msg);
+    await revertToError(msg);
+    return NextResponse.json(
+      { error: "El servidor no está configurado para lanzar el análisis automáticamente. Contacta con el administrador." },
+      { status: 503 }
+    );
+  }
+
+  try {
+    const ghResp = await fetch(
       `https://api.github.com/repos/${owner}/${repo}/actions/workflows/analysis.yml/dispatches`,
       {
         method: "POST",
@@ -90,7 +108,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
         body: JSON.stringify({ ref: "main", inputs: { analysis_type: analysisType } }),
       }
-    ).catch((err) => console.error("Failed to dispatch analysis workflow:", err));
+    );
+    if (!ghResp.ok) {
+      const body = await ghResp.text().catch(() => "");
+      const msg = `GitHub workflow dispatch failed (${ghResp.status}): ${body}`;
+      console.error(msg);
+      await revertToError(msg);
+      return NextResponse.json(
+        { error: `No se pudo lanzar el análisis (GitHub ${ghResp.status}). Revisa los logs del servidor.` },
+        { status: 502 }
+      );
+    }
+  } catch (err) {
+    const msg = `Network error dispatching analysis workflow: ${err}`;
+    console.error(msg);
+    await revertToError(msg);
+    return NextResponse.json(
+      { error: "No se pudo contactar con GitHub para lanzar el análisis." },
+      { status: 502 }
+    );
   }
 
   return NextResponse.json({ ok: true });

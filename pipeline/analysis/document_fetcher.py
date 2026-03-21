@@ -3,10 +3,10 @@
 Two-step fetch:
   1. Parse the tender's main page to find the 'Pliego' HTML view link in the
      'Anuncios y Documentos' table.
-  2. Fetch that Pliego HTML page and locate the PDF links for:
-       - Pliego de Prescripciones Técnicas (PPT)
-       - Pliego de Cláusulas Administrativas (PCAP)
-  3. Download and extract text from each PDF separately.
+  2. Fetch that Pliego HTML page and locate all PDF links for:
+       - Technical documents (PPT): links containing "tecnic*"
+       - Administrative documents (PCAP): links containing "administ*"
+  3. Download and extract full text from each matched document.
 """
 from __future__ import annotations
 
@@ -22,14 +22,13 @@ logger = logging.getLogger(__name__)
 
 _TIMEOUT_SECONDS = 30
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
-_MAX_PAGES = 20  # PDF pages to read
 
 
 @dataclass
 class PliegoTexts:
     """Extracted texts from the two key pliego documents."""
-    ppt_text: str = ""    # Pliego de Prescripciones Técnicas
-    pcap_text: str = ""   # Pliego de Cláusulas Administrativas
+    ppt_text: str = ""    # Pliego de Prescripciones Técnicas (concatenated)
+    pcap_text: str = ""   # Pliego de Cláusulas Administrativas (concatenated)
     attached_files: list[dict] = field(default_factory=list)
 
 
@@ -120,18 +119,20 @@ class _PliegoDocParser(HTMLParser):
     """Finds PPT and PCAP document links on the Pliego HTML page.
 
     Looks for <a href="..."> tags whose visible text or title attribute
-    contains keywords identifying each document type. Accepts any link format
-    (PDF, DOCX, HTML viewer) — content-type detection happens at download time.
+    contains keywords identifying each document type. Collects ALL matching
+    links per type (there may be multiple annexes or parts).
+    Accepts any link format (PDF, DOCX, HTML viewer) — content-type detection
+    happens at download time.
     """
 
-    _PPT_KEYWORDS = ("prescripciones",)
-    _PCAP_KEYWORDS = ("cláusulas", "clausulas")
+    _PPT_KEYWORDS = ("tecnic",)       # matches técnico, técnica, técnicas, tecnicas, …
+    _PCAP_KEYWORDS = ("administ",)    # matches administrativo, administrativa, administración, …
 
     def __init__(self, base_url: str) -> None:
         super().__init__()
         self.base_url = base_url
-        self.ppt_url: str | None = None
-        self.pcap_url: str | None = None
+        self.ppt_urls: list[str] = []
+        self.pcap_urls: list[str] = []
 
         self._current_href: str | None = None
         self._current_title: str | None = None
@@ -158,10 +159,12 @@ class _PliegoDocParser(HTMLParser):
 
         combined = (self._current_link_text + " " + (self._current_title or "")).lower()
 
-        if self.ppt_url is None and any(kw in combined for kw in self._PPT_KEYWORDS):
-            self.ppt_url = self._current_href
-        elif self.pcap_url is None and any(kw in combined for kw in self._PCAP_KEYWORDS):
-            self.pcap_url = self._current_href
+        if any(kw in combined for kw in self._PPT_KEYWORDS):
+            if self._current_href not in self.ppt_urls:
+                self.ppt_urls.append(self._current_href)
+        elif any(kw in combined for kw in self._PCAP_KEYWORDS):
+            if self._current_href not in self.pcap_urls:
+                self.pcap_urls.append(self._current_href)
 
         self._current_href = None
         self._current_title = None
@@ -197,7 +200,7 @@ def _extract_pdf_text(content: bytes) -> str:
 
         reader = pypdf.PdfReader(io.BytesIO(content))
         parts = []
-        for page in reader.pages[:_MAX_PAGES]:
+        for page in reader.pages:
             text = page.extract_text()
             if text:
                 parts.append(text)
@@ -225,7 +228,7 @@ def _extract_docx_text(content: bytes) -> str:
 
 
 def _download_pdf_text(url: str) -> str:
-    """Download a URL and extract its text (PDF or DOCX)."""
+    """Download a URL and extract its full text (PDF or DOCX)."""
     try:
         content = _fetch_bytes(url)
     except Exception as exc:
@@ -262,23 +265,27 @@ class DocumentFetcher:
             logger.warning("No Pliego HTML link found on %s", tender_url)
         return parser.pliego_html_url
 
-    def fetch_pliego_pdf_urls(self, pliego_url: str) -> dict[str, str | None]:
-        """Return {'ppt': url_or_None, 'pcap': url_or_None} from the Pliego HTML page."""
+    def fetch_pliego_pdf_urls(self, pliego_url: str) -> dict[str, list[str]]:
+        """Return {'ppt': [urls], 'pcap': [urls]} from the Pliego HTML page."""
         try:
             html = _fetch_url(pliego_url)
         except (URLError, HTTPError, Exception) as exc:
             logger.warning("Could not fetch Pliego page %s: %s", pliego_url, exc)
-            return {"ppt": None, "pcap": None}
+            return {"ppt": [], "pcap": []}
 
         parser = _PliegoDocParser(pliego_url)
         parser.feed(html)
 
-        logger.info("Pliego PDFs — PPT: %s | PCAP: %s", parser.ppt_url, parser.pcap_url)
-        return {"ppt": parser.ppt_url, "pcap": parser.pcap_url}
+        logger.info(
+            "Pliego PDFs — PPT: %d found | PCAP: %d found",
+            len(parser.ppt_urls), len(parser.pcap_urls),
+        )
+        return {"ppt": parser.ppt_urls, "pcap": parser.pcap_urls}
 
     def fetch_texts(self, tender_url: str) -> PliegoTexts:
         """Fetch PPT and PCAP texts from the tender's Pliego documents.
 
+        Downloads all matching documents per type and concatenates their text.
         Returns a PliegoTexts dataclass. Any step that fails is logged as a
         warning and results in an empty string for that document.
         """
@@ -290,29 +297,36 @@ class DocumentFetcher:
 
         pdf_urls = self.fetch_pliego_pdf_urls(pliego_url)
 
-        ppt_url = pdf_urls.get("ppt")
-        pcap_url = pdf_urls.get("pcap")
-
-        if ppt_url:
-            logger.info("Fetching PPT PDF: %s", ppt_url)
-            result.ppt_text = _download_pdf_text(ppt_url)
+        ppt_parts: list[str] = []
+        for url in pdf_urls.get("ppt", []):
+            logger.info("Fetching PPT document: %s", url)
+            text = _download_pdf_text(url)
+            if text:
+                ppt_parts.append(text)
             result.attached_files.append({
                 "name": "Pliego de Prescripciones Técnicas",
-                "url": ppt_url,
+                "url": url,
                 "type": "pdf",
             })
+        if ppt_parts:
+            result.ppt_text = "\n\n---\n\n".join(ppt_parts)
         else:
-            logger.warning("PPT PDF not found on Pliego page %s", pliego_url)
+            logger.warning("No PPT documents found on Pliego page %s", pliego_url)
 
-        if pcap_url:
-            logger.info("Fetching PCAP PDF: %s", pcap_url)
-            result.pcap_text = _download_pdf_text(pcap_url)
+        pcap_parts: list[str] = []
+        for url in pdf_urls.get("pcap", []):
+            logger.info("Fetching PCAP document: %s", url)
+            text = _download_pdf_text(url)
+            if text:
+                pcap_parts.append(text)
             result.attached_files.append({
                 "name": "Pliego de Cláusulas Administrativas",
-                "url": pcap_url,
+                "url": url,
                 "type": "pdf",
             })
+        if pcap_parts:
+            result.pcap_text = "\n\n---\n\n".join(pcap_parts)
         else:
-            logger.warning("PCAP PDF not found on Pliego page %s", pliego_url)
+            logger.warning("No PCAP documents found on Pliego page %s", pliego_url)
 
         return result

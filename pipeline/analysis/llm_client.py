@@ -10,41 +10,84 @@ from typing import Literal, Optional
 logger = logging.getLogger(__name__)
 
 _MODEL = "claude-opus-4-6"
-_MAX_DOC_CHARS = 8_000   # chars per document sent to the LLM
-_MAX_TOKENS = 4096
+_MAX_TOKENS = 8192
 
 AnalysisType = Literal["technical", "administrative"]
 
 _SYSTEM_PROMPT_TECHNICAL = """\
-Eres un asistente especializado en análisis de licitaciones públicas españolas.
-Se te proporciona el objeto del contrato y el texto del Pliego de Prescripciones
-Técnicas (PPT).
+Act as an expert in public procurement and contract analysis. Your goal is to \
+break down the attached Technical Specifications Document (TSD/PPT) so that a \
+bidding company can quickly understand if they are eligible and what they must offer.
 
-Extrae la información relevante y devuelve ÚNICAMENTE un objeto JSON válido con estas claves:
+Extract the information following this strict outline:
 
+1. **Critical Mission (The "What"):** Define the main object of the contract and \
+list the 5 most important tasks or deliverables that define the success of the \
+service or project.
+2. **Technical Capacity and Team (The "Who"):** Detail the specific personnel \
+requirements (degrees, years of experience, certifications, or professional \
+licenses) and whether subcontracting is permitted or prohibited.
+3. **Timeline and On-site Requirements (The "When and Where"):** Indicate the \
+initial performance period, possible extensions, and whether the service requires \
+a physical presence (meetings, standby duty, site visits) or can be executed remotely.
+4. **Urgency and Service Level Agreements (SLAs):** Identify required response \
+times for incidents, deadlines for submitting reports, or mandatory critical milestones.
+5. **Economic Threshold and Invoicing:** State the maximum tender budget \
+(specifying whether it includes VAT or not) and the payment frequency \
+(monthly, per milestone, etc.).
+6. **Red Flags/Alerts:** Mention any relevant clauses regarding confidentiality, \
+intellectual property, or penalties for non-compliance.
+
+Output Format: Use headings, bold text for key concepts, and bullet points to \
+ensure a quick and easy read. Add a link to the PDF.
+
+Return your analysis as a JSON object with this exact structure:
 {
-  "services_required": "<Extraído del PLIEGO DE PRESCRIPCIONES TÉCNICAS.\\n\\nResumen del objeto: párrafo de 3-5 frases que explique el objetivo general y el alcance del servicio contratado.\\n\\nServicios y actuaciones: lista numerada y completa de todos los servicios, actividades y tareas que debe realizar el adjudicatario, tal como aparecen en el pliego técnico.\\n\\nRequisitos del equipo: perfiles profesionales exigidos, titulaciones requeridas, experiencia mínima de cada perfil y dedicación (jornada/horas) requerida.>",
-  "key_data_summary": "<Datos clave: presupuesto base de licitación (con y sin IVA si consta), valor estimado del contrato, plazo límite de presentación de ofertas (fecha y hora), duración del contrato y posibles prórrogas, número de lotes, código CPV, órgano de contratación.>"
+  "services_required": "<your full markdown analysis>"
 }
 
-Usa null para cualquier campo sobre el que no tengas información suficiente.
-Responde SOLO con el JSON, sin texto antes ni después.
+Use null for services_required if the document is not available.
+Respond ONLY with the JSON, no text before or after.
 """
 
 _SYSTEM_PROMPT_ADMINISTRATIVE = """\
-Eres un asistente especializado en análisis de licitaciones públicas españolas.
-Se te proporciona el objeto del contrato y el texto del Pliego de Cláusulas
-Administrativas (PCAP).
+Act as a senior expert in public procurement and legal bidding. Your task is to \
+analyze the attached Administrative Clauses Particulars (ACD/PCAP) and extract \
+the essential information a company needs to decide whether to bid and how to \
+prepare their submission.
 
-Extrae la información relevante y devuelve ÚNICAMENTE un objeto JSON válido con estas claves:
+Please extract the following information in a structured format:
 
+1. **Contract Basics:** State the contract's object, the Base Tender Budget \
+(specifying with and without VAT), and the Estimated Value (including potential extensions).
+2. **Eligibility & Solvency Requirements (The "Cut-off" Criteria):** Detail the \
+minimum financial requirements (annual turnover) and technical requirements \
+(specific previous contracts or certifications) needed to avoid disqualification.
+3. **Procedure & Submission:** Identify the type of procedure (e.g., Open, \
+Simplified, Abreviated) and the specific electronic platform required for \
+submission (e.g., PLYCA, PLACE, etc.). Specify the number of "folders" or \
+"envelopes" (Sobres) and their content.
+4. **Award Criteria (How to Win):** Break down the scoring system. How many \
+points are given for the Economic Offer (price) versus Qualitative Criteria \
+(Technical Report/Judgment of Value)? List any "Improvements" (Mejoras) that \
+grant extra points.
+5. **Key Deadlines:** Identify the deadline for submitting bids, the initial \
+duration of the contract, and the maximum duration including all possible extensions.
+6. **Guarantees & Financial Obligations:** Mention if a Definitive Guarantee \
+(usually 5%) is required upon award and any other costs the winner must cover \
+(e.g., announcement fees).
+
+Output Format: Use clear headings, bold key terms, and bullet points for \
+readability. Link the PDF. If any specific data is not found in the document, \
+state "Not specified in this document."
+
+Return your analysis as a JSON object with this exact structure:
 {
-  "administrative_conditions": "<Extraído del PLIEGO DE CLÁUSULAS ADMINISTRATIVAS. Condiciones legales y administrativas relevantes que la empresa debe cumplir: criterios de solvencia económica y técnica, garantías exigidas, condiciones de subcontratación, obligaciones de confidencialidad, seguros requeridos, penalidades por incumplimiento, y cualquier otra obligación administrativa de carácter relevante.>",
-  "key_data_summary": "<Datos clave: presupuesto base de licitación (con y sin IVA si consta), valor estimado del contrato, plazo límite de presentación de ofertas (fecha y hora), duración del contrato y posibles prórrogas, número de lotes, código CPV, órgano de contratación.>"
+  "administrative_conditions": "<your full markdown analysis>"
 }
 
-Usa null para cualquier campo sobre el que no tengas información suficiente.
-Responde SOLO con el JSON, sin texto antes ni después.
+Use null for administrative_conditions if the document is not available.
+Respond ONLY with the JSON, no text before or after.
 """
 
 
@@ -78,20 +121,20 @@ class LLMAnalyzer:
         if analysis_type == "technical":
             system_prompt = _SYSTEM_PROMPT_TECHNICAL
             doc_section = (
-                f"PLIEGO DE PRESCRIPCIONES TÉCNICAS:\n"
-                f"{ppt_text[:_MAX_DOC_CHARS] if ppt_text else '(no disponible)'}"
+                f"TECHNICAL SPECIFICATIONS DOCUMENT (PPT):\n"
+                f"{ppt_text if ppt_text else '(not available)'}"
             )
         else:
             system_prompt = _SYSTEM_PROMPT_ADMINISTRATIVE
             doc_section = (
-                f"PLIEGO DE CLÁUSULAS ADMINISTRATIVAS:\n"
-                f"{pcap_text[:_MAX_DOC_CHARS] if pcap_text else '(no disponible)'}"
+                f"ADMINISTRATIVE CLAUSES DOCUMENT (PCAP):\n"
+                f"{pcap_text if pcap_text else '(not available)'}"
             )
 
         user_content = (
-            f"LICITACIÓN: {title}\n\n"
-            f"OBJETO DEL CONTRATO:\n{summary}\n\n"
-            f"ENLACE: {link}\n\n"
+            f"TENDER: {title}\n\n"
+            f"CONTRACT OBJECT:\n{summary}\n\n"
+            f"LINK: {link}\n\n"
             f"{doc_section}"
         )
 
@@ -112,7 +155,7 @@ class LLMAnalyzer:
             services_required=parsed.get("services_required") or None,
             technical_conditions=parsed.get("technical_conditions") or None,
             administrative_conditions=parsed.get("administrative_conditions") or None,
-            key_data_summary=parsed.get("key_data_summary") or None,
+            key_data_summary=None,  # now embedded within the main analysis sections
             raw_llm_output=raw_output,
         )
 

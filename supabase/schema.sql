@@ -169,7 +169,7 @@ create table public.tender_analysis (
   id                        bigserial primary key,
   tender_id                 bigint not null references public.tenders_raw(id),
   analysis_type             text not null check (analysis_type in ('technical', 'administrative')),
-  project_id                uuid references public.projects(id),
+  project_id                uuid not null references public.projects(id),
   triggered_by              uuid references public.profiles(id),
   status                    text not null default 'pending'
                               check (status in ('pending','running','done','error')),
@@ -181,7 +181,7 @@ create table public.tender_analysis (
   raw_llm_output            jsonb,
   triggered_at              timestamptz not null default now(),
   completed_at              timestamptz,
-  unique (tender_id, analysis_type)
+  unique (tender_id, analysis_type, project_id)
 );
 
 -- =============================================================

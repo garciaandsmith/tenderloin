@@ -20,16 +20,14 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
   const router = useRouter();
   const f = initialFilters;
 
-  const [budgetMin, setBudgetMin] = useState(f?.budget_min?.toString() ?? "40000");
+  const [budgetMin, setBudgetMin] = useState(f?.budget_min?.toString() ?? "");
   const [budgetMax, setBudgetMax] = useState(f?.budget_max?.toString() ?? "");
-  const [regions, setRegions] = useState<string[]>(f?.regions ?? ["ES30", "ES300"]);
+  const [regions, setRegions] = useState<string[]>(f?.regions ?? []);
   const [cpvCodes, setCpvCodes] = useState<string[]>(f?.cpv_codes ?? []);
-  const [contractTypes, setContractTypes] = useState<string[]>(f?.contract_types ?? ["services"]);
+  const [contractTypes, setContractTypes] = useState<string[]>(f?.contract_types ?? []);
   const [procedureTypes, setProcedureTypes] = useState<string[]>(f?.procedure_types ?? []);
   const [keywordsInclude, setKeywordsInclude] = useState<string[]>(f?.keywords_include ?? []);
-  const [keywordsExclude, setKeywordsExclude] = useState<string[]>(
-    f?.keywords_exclude ?? ["suministro", "obras", "stand", "montaje", "compra de medios"]
-  );
+  const [keywordsExclude, setKeywordsExclude] = useState<string[]>(f?.keywords_exclude ?? []);
   const [buyerTypes, setBuyerTypes] = useState<string[]>(f?.buyer_types ?? []);
   const [maxLotCount, setMaxLotCount] = useState(f?.max_lot_count?.toString() ?? "");
   const [minContractMonths, setMinContractMonths] = useState(f?.min_contract_months?.toString() ?? "");

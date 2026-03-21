@@ -29,6 +29,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
+  // Verify the caller is a member of the project they are submitting on behalf of.
+  const { data: membership } = await supabase
+    .from("project_members")
+    .select("project_id")
+    .eq("project_id", projectId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (!membership) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
+
   const tenderIdNum = Number(tenderId);
   if (isNaN(tenderIdNum)) {
     return NextResponse.json({ error: "ID de licitación inválido" }, { status: 400 });
@@ -64,7 +76,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         triggered_at: new Date().toISOString(),
         completed_at: null,
       },
-      { onConflict: "tender_id,analysis_type" }
+      { onConflict: "tender_id,analysis_type,project_id" }
     );
 
   if (error) {
@@ -82,7 +94,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .from("tender_analysis")
       .update({ status: "error", raw_llm_output: { error: message } })
       .eq("tender_id", tenderIdNum)
-      .eq("analysis_type", analysisType);
+      .eq("analysis_type", analysisType)
+      .eq("project_id", projectId);
   }
 
   if (!token || !owner || !repo) {

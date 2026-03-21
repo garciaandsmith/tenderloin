@@ -36,6 +36,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Only process records of this type. Omit to process both types.",
     )
+    parser.add_argument(
+        "--project-id",
+        default=None,
+        help="Only process records belonging to this project ID.",
+    )
     parser.add_argument("--log-level", default="INFO", help="Logging level (default: INFO)")
     return parser.parse_args()
 
@@ -73,6 +78,7 @@ def main() -> None:
         anthropic_api_key=anthropic_key,
         limit=args.limit,
         analysis_type=args.analysis_type,
+        project_id=args.project_id,
     )
     print("analysis_result", {"completed": completed})
 

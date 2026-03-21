@@ -13,6 +13,10 @@ on:
         description: 'Type of analysis to process: technical, administrative, or leave blank for both'
         required: false
         default: ''
+      project_id:
+        description: 'Only process analyses belonging to this project ID'
+        required: false
+        default: ''
 
 jobs:
   analyze-technical:
@@ -43,7 +47,10 @@ jobs:
         if: ${{ github.event.inputs.analysis_type != 'administrative' }}
         run: |
           LIMIT="${{ github.event.inputs.limit || '10' }}"
-          python -m pipeline.run_analysis --limit "$LIMIT" --analysis-type technical
+          PROJECT_ID="${{ github.event.inputs.project_id }}"
+          ARGS="--limit $LIMIT --analysis-type technical"
+          [ -n "$PROJECT_ID" ] && ARGS="$ARGS --project-id $PROJECT_ID"
+          python -m pipeline.run_analysis $ARGS
 
       - name: Notify on failure
         if: failure()
@@ -78,7 +85,10 @@ jobs:
         if: ${{ github.event.inputs.analysis_type != 'technical' }}
         run: |
           LIMIT="${{ github.event.inputs.limit || '10' }}"
-          python -m pipeline.run_analysis --limit "$LIMIT" --analysis-type administrative
+          PROJECT_ID="${{ github.event.inputs.project_id }}"
+          ARGS="--limit $LIMIT --analysis-type administrative"
+          [ -n "$PROJECT_ID" ] && ARGS="$ARGS --project-id $PROJECT_ID"
+          python -m pipeline.run_analysis $ARGS
 
       - name: Notify on failure
         if: failure()

@@ -53,6 +53,11 @@ def parse_args() -> argparse.Namespace:
             "(available automatically in GitHub Actions)."
         ),
     )
+    parser.add_argument(
+        "--project-id",
+        default=None,
+        help="Train only this project UUID (default: all active projects)",
+    )
     parser.add_argument("--log-level", default="INFO", help="Log level")
     return parser.parse_args()
 
@@ -91,6 +96,12 @@ def main() -> None:
 
     if not projects:
         raise SystemExit("No active projects found. Nothing to train.")
+
+    if args.project_id:
+        projects = [p for p in projects if p["id"] == args.project_id]
+        if not projects:
+            raise SystemExit(f"Project {args.project_id!r} not found or not active.")
+        log.info("Training model for single project: %s", args.project_id)
 
     log.info("Training models for %d active project(s)", len(projects))
 

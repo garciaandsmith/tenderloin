@@ -1,4 +1,5 @@
 name: Score Inbox Tenders
+run-name: "score:${{ inputs.project_id || 'all' }}"
 
 on:
   # Trigger manually from the GitHub Actions UI

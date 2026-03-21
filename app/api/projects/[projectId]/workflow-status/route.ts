@@ -68,19 +68,29 @@ export async function GET(request: Request, { params }: Params) {
     updated_at: string;
     created_at: string;
     html_url: string;
-    inputs?: Record<string, string> | null;
+    display_title: string;
   }> = data.workflow_runs ?? [];
 
+  // Extract the project_id encoded in the run title by the `run-name` workflow property.
+  // Format: "score:<project_id>" for project-scoped runs, "score:all" for global runs.
+  // Runs with an unrecognised title format are treated as global (match everyone) so that
+  // manually triggered runs without a project_id still display for all projects.
+  function projectIdFromTitle(title: string): string | null {
+    const m = title.match(/^score:(.+)$/);
+    if (!m) return null;              // unknown format → treat as global
+    return m[1] === "all" ? null : m[1];
+  }
+
   // Find the most recent run that belongs to this project:
-  //   - run.inputs.project_id === projectId  (triggered for this project), OR
-  //   - run.inputs is empty / null            (triggered for all projects, counts for everyone)
+  //   - title encodes this projectId  (triggered for this project), OR
+  //   - title encodes "all" / unknown (triggered for all projects, counts for everyone)
   // If `since` is provided, only consider runs created at or after that timestamp.
   const sinceDate = since ? new Date(since) : null;
 
   const run = runs.find((r) => {
     if (sinceDate && new Date(r.created_at) < sinceDate) return false;
-    const runProjectId = r.inputs?.project_id ?? null;
-    return !runProjectId || runProjectId === projectId;
+    const titleProjectId = projectIdFromTitle(r.display_title ?? "");
+    return titleProjectId === null || titleProjectId === projectId;
   });
 
   if (!run) {

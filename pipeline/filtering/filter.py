@@ -65,7 +65,11 @@ def run_filter_pipeline(
 # ---------------------------------------------------------------------------
 
 def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
-    """Apply this project's filters to all tenders not yet evaluated."""
+    """Apply this project's filters to tenders not yet evaluated.
+
+    Uses the maximum already-evaluated tender ID as a cursor so that only
+    new tenders (higher IDs) are fetched — avoids scanning the entire table.
+    """
 
     # Load filter config (may be empty / not yet configured)
     filters_resp = (
@@ -77,23 +81,19 @@ def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
     )
     filter_cfg: dict = filters_resp.data or {}
 
-    # Tenders already evaluated for this project — paginate to avoid 1000-row cap
-    already_evaluated: set[int] = set()
-    _ae_offset = 0
-    while True:
-        already_resp = (
-            client.table("tender_filter_results")
-            .select("tender_id")
-            .eq("project_id", project_id)
-            .range(_ae_offset, _ae_offset + batch_size - 1)
-            .execute()
-        )
-        ae_rows = already_resp.data or []
-        already_evaluated.update(row["tender_id"] for row in ae_rows)
-        if len(ae_rows) < batch_size:
-            break
-        _ae_offset += batch_size
-    logger.info("[%s] Already evaluated: %d tenders", project_id, len(already_evaluated))
+    # Find the highest tender_id already evaluated for this project.
+    # Since tenders_raw.id is a bigserial, new tenders always have higher IDs,
+    # so we only need to evaluate tenders beyond this cursor.
+    max_resp = (
+        client.table("tender_filter_results")
+        .select("tender_id")
+        .eq("project_id", project_id)
+        .order("tender_id", desc=True)
+        .limit(1)
+        .execute()
+    )
+    max_evaluated_id: int = max_resp.data[0]["tender_id"] if max_resp.data else 0
+    logger.info("[%s] Max evaluated tender_id: %d", project_id, max_evaluated_id)
 
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
@@ -108,6 +108,8 @@ def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
                 "contract_type, procedure_type, lot_count, duration_months, buyer_type"
             )
             .gt("deadline_at", now_iso)
+            .gt("id", max_evaluated_id)
+            .order("id")
             .range(offset, offset + batch_size - 1)
             .execute()
         )
@@ -115,17 +117,15 @@ def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
         if not rows:
             break
 
-        to_evaluate = [r for r in rows if r["id"] not in already_evaluated]
-        if to_evaluate:
-            results = [
-                _evaluate_tender(r, filter_cfg, project_id)
-                for r in to_evaluate
-            ]
-            client.table("tender_filter_results").upsert(
-                results,
-                on_conflict="tender_id,project_id",
-            ).execute()
-            total_written += len(results)
+        results = [
+            _evaluate_tender(r, filter_cfg, project_id)
+            for r in rows
+        ]
+        client.table("tender_filter_results").upsert(
+            results,
+            on_conflict="tender_id,project_id",
+        ).execute()
+        total_written += len(results)
 
         if len(rows) < batch_size:
             break

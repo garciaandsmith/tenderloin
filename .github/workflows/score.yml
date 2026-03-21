@@ -45,13 +45,18 @@ jobs:
           fi
 
       # ── Step 2: Train ──────────────────────────────────────────────────────
-      # Always trains all projects so the model release stays up to date.
       - name: Train per-project scoring models and publish
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -m pipeline.run_train --publish
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: |
+          if [ -n "$PROJECT_ID" ]; then
+            python -m pipeline.run_train --publish --project-id "$PROJECT_ID"
+          else
+            python -m pipeline.run_train --publish
+          fi
 
       # ── Step 3: Score ──────────────────────────────────────────────────────
       - name: Score active tenders (per project)

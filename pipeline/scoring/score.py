@@ -2,18 +2,16 @@
 
 For each active project:
   1. Load the project's model artifact from ``models_dir``.
-  2. Find all tenders with a future deadline not yet scored by this
-     project + model version.
+  2. Find tenders that passed the project's hard filters (from
+     ``tender_filter_results``) not yet scored by this project + model version.
   3. Encode and write scores to ``tender_model_scores``.
 
 Projects without a model artifact are skipped with a warning.
-Display-level filtering (which tenders appear in the inbox) is handled
-by the frontend ``applyHardFilters`` and is intentionally separate from
-scoring — every active tender gets a score so the inbox always has one.
+The filter step must run before the score step so ``tender_filter_results``
+is populated.
 """
 from __future__ import annotations
 
-import datetime
 import logging
 from pathlib import Path
 
@@ -53,33 +51,7 @@ def score_unscored_tenders(
             return 0
         logger.info("Scoring for %d active project(s): %s", len(project_ids), project_ids)
 
-    # Fetch all active tender IDs once (future deadline only) — reused for every project.
-    # Paginate to avoid the default 1000-row cap in the Supabase client.
-    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    active_ids: set[int] = set()
     _page_size = 1000
-    _offset = 0
-    while True:
-        active_resp = (
-            client.table("tenders_raw")
-            .select("id")
-            .gt("deadline_at", now_iso)
-            .order("id")
-            .range(_offset, _offset + _page_size - 1)
-            .execute()
-        )
-        _batch = active_resp.data or []
-        for row in _batch:
-            active_ids.add(row["id"])
-        if len(_batch) < _page_size:
-            break
-        _offset += _page_size
-    logger.info("Active tenders (future deadline): %d", len(active_ids))
-
-    if not active_ids:
-        logger.info("No active tenders found. Nothing to score.")
-        return 0
-
     total_written = 0
 
     for proj_id in project_ids:
@@ -103,6 +75,30 @@ def score_unscored_tenders(
 
         embedder = SentenceTransformer(embedder_name)
 
+        # Tenders that passed this project's hard filters (paginated, per-project).
+        filtered_ids: set[int] = set()
+        _ff_offset = 0
+        while True:
+            ff_resp = (
+                client.table("tender_filter_results")
+                .select("tender_id")
+                .eq("project_id", proj_id)
+                .eq("passed", True)
+                .range(_ff_offset, _ff_offset + _page_size - 1)
+                .execute()
+            )
+            ff_batch = ff_resp.data or []
+            for row in ff_batch:
+                filtered_ids.add(row["tender_id"])
+            if len(ff_batch) < _page_size:
+                break
+            _ff_offset += _page_size
+        logger.info("[%s] Tenders passing filters: %d", proj_id, len(filtered_ids))
+
+        if not filtered_ids:
+            logger.info("[%s] No filtered tenders — skipping (run filter step first).", proj_id)
+            continue
+
         # Tenders already scored for this project + model version (paginated).
         already_scored: set[int] = set()
         _as_offset = 0
@@ -123,7 +119,7 @@ def score_unscored_tenders(
             _as_offset += _page_size
         logger.info("[%s] Already scored: %d tenders", proj_id, len(already_scored))
 
-        to_score_ids = active_ids - already_scored
+        to_score_ids = filtered_ids - already_scored
 
         if not to_score_ids:
             logger.info("[%s] No new tenders to score.", proj_id)

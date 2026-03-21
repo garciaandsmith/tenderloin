@@ -21,11 +21,13 @@ def process_pending_analyses(
     anthropic_api_key: str,
     limit: int = 10,
     analysis_type: Optional[str] = None,
+    project_id: Optional[str] = None,
 ) -> int:
     """Process up to *limit* pending analysis records.
 
     If *analysis_type* is given ('technical' or 'administrative'), only records
     of that type are processed.  When omitted both types are processed together.
+    If *project_id* is given, only records belonging to that project are processed.
 
     Returns the number of records successfully completed.
     """
@@ -47,6 +49,8 @@ def process_pending_analyses(
     )
     if analysis_type:
         query = query.eq("analysis_type", analysis_type)
+    if project_id:
+        query = query.eq("project_id", project_id)
 
     pending_resp = query.execute()
     pending = pending_resp.data or []

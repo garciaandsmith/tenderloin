@@ -106,7 +106,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           "X-GitHub-Api-Version": "2022-11-28",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ref: "main", inputs: { analysis_type: analysisType } }),
+        body: JSON.stringify({ ref: "main", inputs: { analysis_type: analysisType, project_id: projectId } }),
       }
     );
     if (!ghResp.ok) {

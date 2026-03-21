@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 
 interface Params {
   params: Promise<{ projectId: string }>;
@@ -44,7 +44,9 @@ export async function POST(_request: Request, { params }: Params) {
   // re-evaluates all active tenders with the freshly trained model.
   // Filter results are intentionally preserved — the filter step will only
   // process tenders it has not yet evaluated (incremental).
-  const { error: scoresError } = await supabase
+  // Uses the admin client to bypass RLS (tender_model_scores has no DELETE policy).
+  const adminSupabase = await createAdminClient();
+  const { error: scoresError } = await adminSupabase
     .from("tender_model_scores")
     .delete()
     .eq("project_id", projectId);

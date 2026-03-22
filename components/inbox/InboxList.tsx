@@ -79,22 +79,25 @@ export default function InboxList({ tenders, projectId }: Props) {
     );
   }
 
-  const scoredCount = tenders.filter((t) => t.model_score !== null).length;
-  const starredCount = tenders.filter((t) => favorites.has(t.id)).length;
-  const processedCount = tenders.filter((t) => t.analysis_status === "done").length;
+  // Single pass: compute counts and apply filters simultaneously
+  let scoredCount = 0;
+  let starredCount = 0;
+  let processedCount = 0;
+  const filtered: InboxTender[] = [];
 
-  // Apply filters
-  const filtered = tenders.filter((t) => {
-    // Tab filter
-    if (activeTab === "starred" && !favorites.has(t.id)) return false;
-    if (activeTab === "processed" && t.analysis_status !== "done") return false;
-    // Score range filter (only apply to scored tenders; unscored always shown)
+  for (const t of tenders) {
+    if (t.model_score !== null) scoredCount++;
+    if (favorites.has(t.id)) starredCount++;
+    if (t.analysis_status === "done") processedCount++;
+
+    if (activeTab === "starred" && !favorites.has(t.id)) continue;
+    if (activeTab === "processed" && t.analysis_status !== "done") continue;
     if (t.model_score !== null) {
       const rounded = Math.round(t.model_score);
-      if (rounded < minScore || rounded > maxScore) return false;
+      if (rounded < minScore || rounded > maxScore) continue;
     }
-    return true;
-  });
+    filtered.push(t);
+  }
 
   return (
     <div>

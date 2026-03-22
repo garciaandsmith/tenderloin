@@ -14,7 +14,7 @@ export default async function AdminUsersPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("*")
+    .select("role")
     .eq("id", user!.id)
     .single();
 
@@ -24,7 +24,8 @@ export default async function AdminUsersPage() {
   const { data: users } = await admin
     .from("profiles")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
 
   return (
     <div className="max-w-4xl mx-auto">

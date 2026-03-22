@@ -95,9 +95,11 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
 }
 
 /** Fetch a batch of unscored tenders for the training queue.
- *  Returns up to `limit` tenders matching the project's hard filters that have
- *  NOT yet been scored by ANY user in the current training session, and are
- *  not in the provided `excludeIds` list. */
+ *  Returns up to `limit` OUTDATED tenders (past deadline) matching the project's
+ *  hard filters that have NOT yet been scored by ANY user in the current training
+ *  session, and are not in the provided `excludeIds` list.
+ *
+ *  Training must use expired tenders so they never appear in the active inbox. */
 export async function getTrainingTenderBatch(
   projectId: string,
   excludeIds: number[] = [],
@@ -121,7 +123,9 @@ export async function getTrainingTenderBatch(
   let query = supabase
     .from("tenders_raw")
     .select("id, title, summary, link, buyer_name, budget_amount, published_at, deadline_at, cpv, region, contract_type, procedure_type")
-    .order("deadline_at", { ascending: true, nullsFirst: false })
+    // Outdated tenders only — past deadline, never active inbox items
+    .lt("deadline_at", new Date().toISOString())
+    .order("deadline_at", { ascending: false, nullsFirst: false })
     .order("published_at", { ascending: false })
     .limit(limit);
 

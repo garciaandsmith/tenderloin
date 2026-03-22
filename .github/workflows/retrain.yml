@@ -1,11 +1,15 @@
-name: Monthly Model Retraining
+name: Retrain Scoring Model
+run-name: "retrain:${{ inputs.project_id || 'all' }}"
 
 on:
-  schedule:
-    # First day of each month at 06:00 UTC (before the daily capture at 07:00)
-    - cron: '0 6 1 * *'
-  # Allow manual trigger from the GitHub Actions UI
+  # Triggered automatically via API when a user submits training scores.
+  # Also triggerable manually from the GitHub Actions UI.
   workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'Project UUID to retrain (leave empty to retrain all active projects)'
+        required: false
+        type: string
 
 jobs:
   retrain:
@@ -29,15 +33,21 @@ jobs:
           pip install --upgrade pip
           if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
 
-      - name: Train one model per active project and publish
+      - name: Train scoring model and publish
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -m pipeline.run_train --publish
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: |
+          if [ -n "$PROJECT_ID" ]; then
+            python -m pipeline.run_train --publish --project-id "$PROJECT_ID"
+          else
+            python -m pipeline.run_train --publish
+          fi
 
       - name: Notify on failure
         if: failure()
         run: |
-          echo "Retraining job failed at $(date -u). Check the Actions log."
+          echo "Retraining job failed at $(date -u) for project '${{ inputs.project_id }}'. Check the Actions log."
           # Add Slack/email notification here if needed in the future.

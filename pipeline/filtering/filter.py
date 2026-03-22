@@ -9,7 +9,6 @@ processed, so incremental daily runs are cheap.
 """
 from __future__ import annotations
 
-import datetime
 import logging
 from typing import Any
 
@@ -95,8 +94,6 @@ def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
     max_evaluated_id: int = max_resp.data[0]["tender_id"] if max_resp.data else 0
     logger.info("[%s] Max evaluated tender_id: %d", project_id, max_evaluated_id)
 
-    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-
     offset = 0
     total_written = 0
 
@@ -107,7 +104,6 @@ def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
                 "id, title, summary, region, cpv, budget_amount, "
                 "contract_type, procedure_type, lot_count, duration_months, buyer_type"
             )
-            .gt("deadline_at", now_iso)
             .gt("id", max_evaluated_id)
             .order("id")
             .range(offset, offset + batch_size - 1)

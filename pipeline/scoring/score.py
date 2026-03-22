@@ -12,6 +12,7 @@ is populated.
 """
 from __future__ import annotations
 
+import datetime
 import logging
 from pathlib import Path
 
@@ -127,7 +128,9 @@ def score_unscored_tenders(
 
         logger.info("[%s] Tenders to score: %d", proj_id, len(to_score_ids))
 
-        # Fetch and score in batches
+        # Fetch and score in batches — only tenders with a future deadline
+        # (outdated tenders remain in filter results for training purposes only).
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         project_written = 0
         ids_list = sorted(to_score_ids)
 
@@ -138,6 +141,7 @@ def score_unscored_tenders(
                 client.table("tenders_raw")
                 .select("id, title, summary")
                 .in_("id", batch_ids)
+                .gt("deadline_at", now_iso)
                 .execute()
             )
             rows = resp.data or []

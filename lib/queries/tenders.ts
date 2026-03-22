@@ -111,11 +111,14 @@ export async function getTrainingTenderBatch(
     getTrainingSession(projectId),
   ]);
 
+  // Limit to 500 to keep the NOT IN clause within HTTP GET URL size limits.
+  // Exceeding ~700 IDs would produce a URL > 8 KB and cause a 414 error.
   const { data: scoredRows } = await supabase
     .from("tender_scores")
     .select("tender_id")
     .eq("project_id", projectId)
-    .eq("training_session", trainingSession);
+    .eq("training_session", trainingSession)
+    .limit(500);
 
   const scoredIds = (scoredRows ?? []).map((r) => r.tender_id);
   const allExcluded = [...new Set([...scoredIds, ...excludeIds])];

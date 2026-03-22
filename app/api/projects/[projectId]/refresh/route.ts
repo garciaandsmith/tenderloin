@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 
 interface Params {
   params: Promise<{ projectId: string }>;
@@ -8,12 +8,13 @@ interface Params {
 /**
  * POST /api/projects/[projectId]/refresh
  *
- * Clears existing model scores for the project (so the scoring step
- * re-scores ALL active tenders with the freshly trained model), then
- * triggers the score.yml workflow.  Filter results are kept intact so
- * the filter step only evaluates genuinely new tenders.
+ * Clears existing model scores AND filter results for the project, then
+ * triggers the score.yml workflow (filter → score).  Clearing filter results
+ * forces a full re-evaluation against the current project filter config so
+ * that tenders whose status changed due to filter updates are correctly
+ * included or excluded when the scoring step runs.
  *
- * Admin-only.
+ * Admin or project member only.
  */
 export async function POST(_request: Request, { params }: Params) {
   const { projectId } = await params;
@@ -40,17 +41,38 @@ export async function POST(_request: Request, { params }: Params) {
     if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Use the admin client for the DELETE operations: tender_model_scores and
+  // tender_filter_results have no RLS DELETE policies, so the user-scoped
+  // client would silently delete 0 rows (Supabase skips rows the policy does
+  // not permit without returning an error).  Authorization has already been
+  // verified above, so bypassing RLS here is intentional and safe.
+  const adminSupabase = await createAdminClient();
+
   // Clear existing model scores for this project so the scoring pipeline
   // re-evaluates all active tenders with the freshly trained model.
-  // Filter results are intentionally preserved — the filter step will only
-  // process tenders it has not yet evaluated (incremental).
-  const { error: scoresError } = await supabase
+  const { error: scoresError } = await adminSupabase
     .from("tender_model_scores")
     .delete()
     .eq("project_id", projectId);
   if (scoresError) {
     return NextResponse.json(
       { error: `Failed to clear scores: ${scoresError.message}` },
+      { status: 500 }
+    );
+  }
+
+  // Also clear filter results so the filter step re-evaluates ALL tenders
+  // against the current project filter config.  Without this, tenders that
+  // were evaluated before a filter change (and thus have stale passed=false
+  // entries) would never be scored even though they now pass the updated
+  // filters — causing them to appear as "Pendiente" in the inbox forever.
+  const { error: filterError } = await adminSupabase
+    .from("tender_filter_results")
+    .delete()
+    .eq("project_id", projectId);
+  if (filterError) {
+    return NextResponse.json(
+      { error: `Failed to clear filter results: ${filterError.message}` },
       { status: 500 }
     );
   }

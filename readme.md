@@ -1,10 +1,10 @@
-# Tenderloin — Public Tender Intelligence for Communication Agencies
+# Tenderloin — Public Tender Intelligence Platform
 
-Tenderloin helps a communication agency monitor Spain's Public Procurement Platform (PLACSP) systematically. It replaces manual, time-consuming searches with an intelligent triage system that surfaces high-value opportunities.
+Tenderloin helps communication agencies monitor Spain's Public Procurement Platform (PLACSP) systematically. It replaces manual, time-consuming searches with an intelligent triage system that surfaces high-value opportunities across multiple accounts and projects.
 
 ## Business Goal
 
-Identify public tenders where the agency has a high probability of winning, filtering by contract volume, region, and thematic affinity (CPV codes), based on ~800 scored historical bids.
+Identify public tenders with a high probability of winning, filtering by contract volume, region, and thematic affinity (CPV codes), then scoring them with ML models trained on each project's own labeled bid history.
 
 ## Project Structure
 
@@ -19,7 +19,6 @@ tenderloin/
 │   └── api/                # API routes (projects, tenders, auth, pipeline)
 ├── components/             # React components (shadcn/ui + custom)
 ├── lib/                    # Supabase client, types, queries, utilities
-├── config/                 # CPV codes, agency profile, scoring rubric
 ├── data/                   # Historical bids (CSV)
 ├── supabase/               # Database migrations
 └── tests/                  # Python unit tests
@@ -37,11 +36,11 @@ tenderloin/
 
 2. **Inbox**: The web app shows incoming tenders per project. Each tender is pre-filtered against the project's configured CPV codes, regions, and budget range.
 
-3. **Training**: Users rate tenders (thumbs up/down) to build a labelled dataset for future ML scoring.
+3. **Training**: Users rate tenders (thumbs up/down) to build a labelled dataset for ML scoring.
 
-4. **AI Scoring** *(planned)*: Classify tender affinity using the historical bid database and agency profile.
+4. **AI Scoring**: Classifies tender affinity using a per-project ML model trained on the project's labeled bid history (sentence-transformers embeddings + scikit-learn regression).
 
-5. **Audit** *(planned)*: Deep analysis of tender specs with executive summary generation.
+5. **Analysis** *(in progress)*: Deep analysis of high-value tender specs (score 4–5) with structured LLM summaries covering key data, required services, technical requirements, and administrative requirements.
 
 ## Setup
 
@@ -73,11 +72,3 @@ npm run dev
 pip install -r pipeline/requirements.txt
 python pipeline/run_capture.py --source-url file://data/sample.json
 ```
-
-## Knowledge Files
-
-| File | Purpose |
-|------|---------|
-| `config/CodigosCPV.txt` | CPV codes the agency can execute |
-| `config/credenciales_agencia.txt` | Agency profile (what we do, what we're good at) |
-| `config/scoring.txt` | Definition of each score level (0–5) |

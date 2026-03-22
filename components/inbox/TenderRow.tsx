@@ -57,9 +57,14 @@ function AnalysisBadge({ status }: { status: string | null }) {
   );
 }
 
+const HOURS_48 = 48 * 60 * 60 * 1000;
+
 export default function TenderRow({ tender, projectId, isFavorited, onToggleFavorite }: Props) {
   const router = useRouter();
   const deadline = daysUntil(tender.deadline_at);
+  const isNew = tender.created_at
+    ? Date.now() - new Date(tender.created_at).getTime() < HOURS_48
+    : false;
 
   return (
     <div
@@ -80,7 +85,14 @@ export default function TenderRow({ tender, projectId, isFavorited, onToggleFavo
 
       {/* Main content */}
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm leading-snug line-clamp-2">{tender.title}</p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="font-medium text-sm leading-snug line-clamp-2">{tender.title}</p>
+          {isNew && (
+            <span className="shrink-0 inline-flex items-center rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 border border-blue-200">
+              nuevo
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           <p className="text-xs text-muted-foreground truncate">{tender.buyer_name}</p>
           <AnalysisBadge status={tender.analysis_status} />
@@ -107,9 +119,9 @@ export default function TenderRow({ tender, projectId, isFavorited, onToggleFavo
         </p>
       </div>
 
-      {/* Published date — hidden on small screens */}
+      {/* Date added to system — hidden on small screens */}
       <div className="hidden lg:block shrink-0 text-xs text-muted-foreground w-20 text-right">
-        {formatDate(tender.published_at)}
+        {formatDate(tender.created_at)}
       </div>
 
       {/* Favorite star — stop propagation to avoid navigating */}

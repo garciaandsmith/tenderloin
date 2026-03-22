@@ -9,7 +9,7 @@ on:
 
 jobs:
   capture:
-    name: Capture → Filter
+    name: Capture → Filter → Score
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -42,6 +42,23 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m pipeline.run_filter
+
+      # ── Step 3: Score ──────────────────────────────────────────────────────
+      - name: Download latest scoring models
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download scoring-model-latest \
+            --repo ${{ github.repository }} \
+            --pattern "scoring_*_v????????.pkl" \
+            --dir models \
+            --clobber || echo "No model release found yet — scoring step will be skipped."
+
+      - name: Score newly-filtered tenders
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m pipeline.run_score
 
       - name: Notify on failure
         if: failure()

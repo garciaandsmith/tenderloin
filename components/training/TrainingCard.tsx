@@ -148,8 +148,7 @@ export default function TrainingCard({
       body: JSON.stringify({ project_id: projectId, score }),
     });
 
-    // 3. Brief pause so the selected score is visible in the overlay
-    await new Promise((r) => setTimeout(r, 300));
+    // 3. Increment the scored counter
     setScoredCount((c) => c + 1);
 
     // 4. Transition slot: fill from queue, or go to loading/empty

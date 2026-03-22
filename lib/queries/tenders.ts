@@ -148,7 +148,7 @@ export async function getScoreDistribution(projectId: string): Promise<ScoreDist
 
   const { data, error } = await supabase
     .from("tender_scores")
-    .select("*")
+    .select("score")
     .eq("project_id", projectId)
     .eq("training_session", trainingSession);
 
@@ -234,7 +234,8 @@ export async function getScoredTenders(
     .select("tender_id, score, scored_at, tenders_raw ( title, cpv, region )")
     .eq("project_id", projectId)
     .eq("training_session", trainingSession)
-    .order("scored_at", { ascending: false });
+    .order("scored_at", { ascending: false })
+    .limit(200);
 
   if (error) throw error;
 

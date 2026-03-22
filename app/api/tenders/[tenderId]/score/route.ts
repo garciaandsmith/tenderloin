@@ -48,5 +48,30 @@ export async function POST(request: Request, { params }: Params) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Trigger model retraining for this project so the model learns from the new score.
+  // Fire-and-forget: a failure here does not affect the score submission response.
+  const ghToken = process.env.GITHUB_TOKEN;
+  const ghOwner = process.env.GITHUB_OWNER;
+  const ghRepo = process.env.GITHUB_REPO;
+
+  if (ghToken && ghOwner && ghRepo) {
+    fetch(
+      `https://api.github.com/repos/${ghOwner}/${ghRepo}/actions/workflows/retrain.yml/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ghToken}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ref: "main", inputs: { project_id: project_id } }),
+      }
+    ).catch(() => {
+      // Retrain dispatch failure is non-fatal; the score has already been saved.
+    });
+  }
+
   return NextResponse.json(data, { status: 201 });
 }

@@ -1,15 +1,20 @@
-name: Daily PLACSP Capture
+name: Daily Hard Filter
 
 on:
   schedule:
-    # Runs daily at 07:00 UTC (09:00 CET / 08:00 GMT)
-    - cron: '0 7 * * *'
+    # Runs daily at 07:30 UTC — after capture (07:00) has completed
+    - cron: '30 7 * * *'
   # Allow manual trigger from the GitHub Actions UI
   workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'Project UUID to filter (leave empty to filter all active projects)'
+        required: false
+        type: string
 
 jobs:
-  capture:
-    name: Capture tenders from PLACSP
+  filter:
+    name: Apply per-project hard filters
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,14 +34,20 @@ jobs:
           pip install --upgrade pip
           if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
 
-      - name: Capture tenders from PLACSP
+      - name: Apply per-project hard filters
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m pipeline.run_capture
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: |
+          if [ -n "$PROJECT_ID" ]; then
+            python -m pipeline.run_filter --project-id "$PROJECT_ID"
+          else
+            python -m pipeline.run_filter
+          fi
 
       - name: Notify on failure
         if: failure()
         run: |
-          echo "Capture job failed at $(date -u). Check the Actions log."
+          echo "Filter job failed at $(date -u). Check the Actions log."
           # Add Slack/email notification here if needed in the future.

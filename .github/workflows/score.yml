@@ -2,20 +2,20 @@ name: Score Inbox Tenders
 run-name: "score:${{ inputs.project_id || 'all' }}"
 
 on:
-  # Trigger manually from the GitHub Actions UI
+  # Trigger manually from the GitHub Actions UI or via API (e.g. from the Actualizar Inbox button)
   workflow_dispatch:
     inputs:
       project_id:
-        description: 'Project UUID to re-score (leave empty to score all active projects)'
+        description: 'Project UUID to score (leave empty to score all active projects)'
         required: false
         type: string
 
 jobs:
   score:
-    name: Filter → Train → Score
+    name: Filter → Score
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # needed to publish the scoring-model-latest release
+      contents: read
 
     steps:
       - name: Check out repository
@@ -33,6 +33,7 @@ jobs:
           if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
 
       # ── Step 1: Filter ─────────────────────────────────────────────────────
+      # Catches any tenders not yet evaluated since the last daily filter run.
       - name: Apply per-project hard filters
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -45,21 +46,18 @@ jobs:
             python -m pipeline.run_filter
           fi
 
-      # ── Step 2: Train ──────────────────────────────────────────────────────
-      - name: Train per-project scoring models and publish
+      # ── Step 2: Score ──────────────────────────────────────────────────────
+      # Applies the existing trained model — training is a separate process.
+      - name: Download latest scoring models
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PROJECT_ID: ${{ inputs.project_id }}
         run: |
-          if [ -n "$PROJECT_ID" ]; then
-            python -m pipeline.run_train --publish --project-id "$PROJECT_ID"
-          else
-            python -m pipeline.run_train --publish
-          fi
+          gh release download scoring-model-latest \
+            --repo ${{ github.repository }} \
+            --pattern "scoring_*_v????????.pkl" \
+            --dir models \
+            --clobber || echo "No model release found yet — scoring step will be skipped."
 
-      # ── Step 3: Score ──────────────────────────────────────────────────────
       - name: Score active tenders (per project)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

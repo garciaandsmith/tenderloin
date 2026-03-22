@@ -200,7 +200,7 @@ export default function InboxList({ tenders, projectId }: Props) {
         <span className="flex-1">Licitación</span>
         <span className="w-24 shrink-0 text-right">Presupuesto</span>
         <span className="w-20 shrink-0 text-right">Plazo</span>
-        <span className="w-20 shrink-0 text-right">Publicado</span>
+        <span className="w-20 shrink-0 text-right">Añadido</span>
         <span className="w-6 shrink-0" />
       </div>
 

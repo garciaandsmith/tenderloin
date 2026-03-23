@@ -1,139 +1,119 @@
-"""Score active tenders using each project's own trained model.
+"""Train a scoring model on each project's human labels, then immediately
+score all tenders that passed hard filters — all in one pass.
 
 For each active project:
-  1. Load the project's model artifact from ``models_dir``.
-  2. Find tenders that passed the project's hard filters (from
-     ``tender_filter_results``) not yet scored by this project + model version.
-  3. Encode and write scores to ``tender_model_scores``.
+  1. Load human-labeled training data from Supabase (current training session).
+  2. If ≥ min_samples: fit Ridge regression on sentence-transformer embeddings.
+  3. Score all tenders in tender_filter_results WHERE passed=true.
+  4. Upsert results to tender_model_scores.
 
-Projects without a model artifact are skipped with a warning.
-The filter step must run before the score step so ``tender_filter_results``
-is populated.
+Projects without enough training data receive a neutral score of 3.0 so they
+still appear in the inbox while waiting for more labels.
+
+The filter step must run before this so tender_filter_results is populated.
 """
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+_EMBEDDER_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
+_MODEL_VERSION = "current"
 
-def score_unscored_tenders(
+
+def train_and_score(
     supabase_url: str,
     supabase_key: str,
-    models_dir: Path,
+    min_samples: int = 5,
     batch_size: int = 200,
     project_id: str | None = None,
 ) -> int:
-    """Score active tenders for one or all active projects.
+    """Train and score tenders for one or all active projects.
 
-    If *project_id* is given only that project is processed; otherwise
-    all active projects are processed.
+    Training and scoring happen in the same process with an in-memory model —
+    no model files or GitHub Releases involved.
 
-    Scores are clamped to [1.0, 5.0] because 0 means "ambiguous / manual review".
-    Returns the total number of rows written to ``tender_model_scores``.
+    Returns the total number of rows written to tender_model_scores.
     """
     from supabase import create_client
     from sentence_transformers import SentenceTransformer
+    from sklearn.linear_model import Ridge
 
-    from pipeline.scoring.model_io import load_latest_model
+    from pipeline.scoring.dataset import load_dataset_for_project
 
     client = create_client(supabase_url, supabase_key)
 
     if project_id:
         project_ids = [project_id]
-        logger.info("Scoring for project: %s", project_id)
+        logger.info("Scoring project: %s", project_id)
     else:
-        projects_resp = client.table("projects").select("id").eq("is_active", True).execute()
-        project_ids = [row["id"] for row in (projects_resp.data or [])]
+        resp = client.table("projects").select("id").eq("is_active", True).execute()
+        project_ids = [r["id"] for r in (resp.data or [])]
         if not project_ids:
-            logger.info("No active projects found. Nothing to score.")
+            logger.info("No active projects found.")
             return 0
-        logger.info("Scoring for %d active project(s): %s", len(project_ids), project_ids)
+        logger.info("Scoring %d active project(s): %s", len(project_ids), project_ids)
 
-    _page_size = 1000
+    _page = 1000
     total_written = 0
 
     for proj_id in project_ids:
-        # Load project-specific model
-        try:
-            artifact = load_latest_model(models_dir, proj_id)
-        except FileNotFoundError:
-            logger.warning(
-                "[%s] No model found — skipping. Run run_train.py to create one.",
-                proj_id,
-            )
-            continue
+        logger.info("[%s] Starting train-and-score", proj_id)
 
-        model_version: str = artifact["version"]
-        embedder_name: str = artifact["embedder_name"]
-        regressor = artifact["regressor"]
-        logger.info(
-            "[%s] Loaded model version %s (MAE=%.3f)",
-            proj_id, model_version, artifact.get("mae", float("nan")),
-        )
-
-        embedder = SentenceTransformer(embedder_name)
-
-        # Tenders that passed this project's hard filters (paginated, per-project).
+        # Collect tenders that passed hard filters (paginated).
         filtered_ids: set[int] = set()
-        _ff_offset = 0
+        offset = 0
         while True:
-            ff_resp = (
+            r = (
                 client.table("tender_filter_results")
                 .select("tender_id")
                 .eq("project_id", proj_id)
                 .eq("passed", True)
-                .range(_ff_offset, _ff_offset + _page_size - 1)
+                .range(offset, offset + _page - 1)
                 .execute()
             )
-            ff_batch = ff_resp.data or []
-            for row in ff_batch:
+            batch = r.data or []
+            for row in batch:
                 filtered_ids.add(row["tender_id"])
-            if len(ff_batch) < _page_size:
+            if len(batch) < _page:
                 break
-            _ff_offset += _page_size
-        logger.info("[%s] Tenders passing filters: %d", proj_id, len(filtered_ids))
+            offset += _page
 
         if not filtered_ids:
-            logger.info("[%s] No filtered tenders — skipping (run filter step first).", proj_id)
+            logger.info("[%s] No filtered tenders — run filter step first.", proj_id)
             continue
 
-        # Tenders already scored for this project + model version (paginated).
-        already_scored: set[int] = set()
-        _as_offset = 0
-        while True:
-            already_resp = (
-                client.table("tender_model_scores")
-                .select("tender_id")
-                .eq("project_id", proj_id)
-                .eq("model_version", model_version)
-                .range(_as_offset, _as_offset + _page_size - 1)
-                .execute()
-            )
-            _as_batch = already_resp.data or []
-            for row in _as_batch:
-                already_scored.add(row["tender_id"])
-            if len(_as_batch) < _page_size:
-                break
-            _as_offset += _page_size
-        logger.info("[%s] Already scored: %d tenders", proj_id, len(already_scored))
+        logger.info("[%s] %d tenders passed filters", proj_id, len(filtered_ids))
 
-        to_score_ids = filtered_ids - already_scored
+        # Try to train a model from this project's human labels.
+        regressor = None
+        embedder = None
+        try:
+            df = load_dataset_for_project(proj_id, supabase_url, supabase_key)
+            if len(df) >= min_samples:
+                logger.info("[%s] Training on %d labeled rows…", proj_id, len(df))
+                embedder = SentenceTransformer(_EMBEDDER_NAME)
+                embs = embedder.encode(
+                    df["text"].tolist(), show_progress_bar=False, batch_size=64
+                )
+                regressor = Ridge(alpha=1.0)
+                regressor.fit(embs, df["score"].values.astype(float))
+                logger.info("[%s] Model trained.", proj_id)
+            else:
+                logger.info(
+                    "[%s] Only %d rows (need %d) — assigning neutral score 3.0",
+                    proj_id, len(df), min_samples,
+                )
+        except ValueError:
+            logger.info("[%s] No training data — assigning neutral score 3.0", proj_id)
 
-        if not to_score_ids:
-            logger.info("[%s] No new tenders to score.", proj_id)
-            continue
-
-        logger.info("[%s] Tenders to score: %d", proj_id, len(to_score_ids))
-
-        # Fetch and score in batches.
+        # Score all filtered tenders in batches.
+        ids_list = sorted(filtered_ids)
         project_written = 0
-        ids_list = sorted(to_score_ids)
 
-        for batch_start in range(0, len(ids_list), batch_size):
-            batch_ids = ids_list[batch_start : batch_start + batch_size]
-
+        for start in range(0, len(ids_list), batch_size):
+            batch_ids = ids_list[start : start + batch_size]
             resp = (
                 client.table("tenders_raw")
                 .select("id, title, summary")
@@ -144,30 +124,37 @@ def score_unscored_tenders(
             if not rows:
                 continue
 
-            texts = [
-                f"{r.get('title', '')}. {r.get('summary', '')}".strip(". ")
-                for r in rows
-            ]
-            embeddings = embedder.encode(texts, show_progress_bar=False, batch_size=64)
-            raw_scores = regressor.predict(embeddings).tolist()
+            if regressor is not None:
+                if embedder is None:
+                    embedder = SentenceTransformer(_EMBEDDER_NAME)
+                texts = [
+                    f"{r.get('title', '')}. {r.get('summary', '')}".strip(". ")
+                    for r in rows
+                ]
+                embeddings = embedder.encode(
+                    texts, show_progress_bar=False, batch_size=64
+                )
+                raw = regressor.predict(embeddings).tolist()
+                scores = [max(1.0, min(5.0, float(s))) for s in raw]
+            else:
+                scores = [3.0] * len(rows)
 
-            upsert_rows = [
-                {
-                    "tender_id": r["id"],
-                    "project_id": proj_id,
-                    "model_score": max(1.0, min(5.0, float(s))),
-                    "model_version": model_version,
-                }
-                for r, s in zip(rows, raw_scores)
-            ]
             client.table("tender_model_scores").upsert(
-                upsert_rows,
+                [
+                    {
+                        "tender_id": r["id"],
+                        "project_id": proj_id,
+                        "model_score": s,
+                        "model_version": _MODEL_VERSION,
+                    }
+                    for r, s in zip(rows, scores)
+                ],
                 on_conflict="tender_id,project_id,model_version",
             ).execute()
-            project_written += len(upsert_rows)
+            project_written += len(rows)
 
-        logger.info("[%s] Scored %d new tenders", proj_id, project_written)
+        logger.info("[%s] Wrote %d scores.", proj_id, project_written)
         total_written += project_written
 
-    logger.info("Scoring complete. Total written across all projects: %d", total_written)
+    logger.info("Scoring complete. Total written: %d", total_written)
     return total_written

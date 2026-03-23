@@ -1,40 +1,45 @@
-"""CLI entry point: score unscored tenders using the latest trained model.
+"""CLI entry point: train scoring models and score filtered tenders.
 
-Usage:
-    python -m pipeline.run_score
+For each active project:
+  1. Load human-labeled training data from Supabase.
+  2. If ≥ min_samples rows: fit a Ridge model in memory.
+  3. Score all tenders that passed hard filters.
+  4. Upsert results to tender_model_scores.
 
-Scores tenders for ALL active projects automatically — no project ID needed.
-Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.
-A model artifact must exist in the models directory (run 'python -m pipeline.run_train' first,
-or let the capture workflow train one automatically on first run).
+The filter step (run_filter.py) must run before this so
+tender_filter_results is populated.
+
+Requires: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.
 """
 from __future__ import annotations
 
 import argparse
 import logging
 import os
-from pathlib import Path
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Score unscored tenders using the latest model")
+    parser = argparse.ArgumentParser(
+        description="Train scoring models and score filtered tenders"
+    )
     parser.add_argument(
-        "--models-dir",
-        default="models",
-        help="Directory containing model artifacts",
+        "--min-samples",
+        type=int,
+        default=5,
+        help="Minimum human-labeled rows needed to train a model (default: 5)",
     )
     parser.add_argument(
         "--batch-size",
         type=int,
         default=200,
-        help="Number of tenders to fetch per Supabase request",
+        help="Tenders fetched per Supabase request (default: 200)",
     )
     parser.add_argument(
         "--project-id",
         default=None,
         help="Score only this project UUID (default: all active projects)",
     )
-    parser.add_argument("--log-level", default="INFO", help="Log level")
+    parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
 
 
@@ -47,22 +52,21 @@ def main() -> None:
 
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-
     if not supabase_url or not supabase_key:
         raise SystemExit(
             "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required."
         )
 
-    from pipeline.scoring.score import score_unscored_tenders
+    from pipeline.scoring.score import train_and_score
 
-    total = score_unscored_tenders(
+    total = train_and_score(
         supabase_url=supabase_url,
         supabase_key=supabase_key,
-        models_dir=Path(args.models_dir),
+        min_samples=args.min_samples,
         batch_size=args.batch_size,
         project_id=args.project_id or None,
     )
-    print("score_result", {"scored": total})
+    print(f"score_result: {{scored: {total}}}")
 
 
 if __name__ == "__main__":

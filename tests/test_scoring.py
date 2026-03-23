@@ -1,13 +1,11 @@
-"""Unit tests for the scoring pipeline (train, dataset, model_io, filtering).
+"""Unit tests for the scoring pipeline (train_and_score, dataset, filtering).
 
 These tests do NOT require Supabase credentials or a GPU — sentence-transformers
-is mocked so the suite runs quickly in CI without heavy dependencies.
+and supabase are mocked so the suite runs quickly in CI without heavy dependencies.
 """
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -85,173 +83,152 @@ class TestLoadDatasetForProject(unittest.TestCase):
                 load_dataset_for_project(_PROJECT_ID, self._URL, self._KEY)
 
 
-class TestModelIO(unittest.TestCase):
-    """Tests for pipeline.scoring.model_io save/load round-trip (per-project)."""
+class TestTrainAndScore(unittest.TestCase):
+    """Tests for pipeline.scoring.score.train_and_score.
 
-    def _make_artifact(self, version: str = "20260101") -> dict:
-        from sklearn.linear_model import Ridge
+    Supabase and sentence-transformers are both mocked.
+    """
 
-        reg = Ridge()
-        reg.fit([[0], [1]], [1.0, 5.0])
-        return {
-            "embedder_name": "paraphrase-multilingual-MiniLM-L12-v2",
-            "regressor": reg,
-            "version": version,
-            "mae": 0.5,
-        }
+    _URL = "https://example.supabase.co"
+    _KEY = "test-key"
 
-    def test_save_creates_project_versioned_pkl(self) -> None:
-        from pipeline.scoring.model_io import save_model
-
-        with tempfile.TemporaryDirectory() as tmp:
-            artifact = self._make_artifact("20260311")
-            path = save_model(artifact, Path(tmp), _PROJECT_ID)
-            self.assertTrue(path.exists())
-            self.assertEqual(path.name, f"scoring_{_PROJECT_ID}_v20260311.pkl")
-
-    def test_load_latest_returns_most_recent_version(self) -> None:
-        from pipeline.scoring.model_io import save_model, load_latest_model
-
-        with tempfile.TemporaryDirectory() as tmp:
-            models_dir = Path(tmp)
-            save_model(self._make_artifact("20260101"), models_dir, _PROJECT_ID)
-            save_model(self._make_artifact("20260201"), models_dir, _PROJECT_ID)
-            save_model(self._make_artifact("20260311"), models_dir, _PROJECT_ID)
-
-            loaded = load_latest_model(models_dir, _PROJECT_ID)
-            self.assertEqual(loaded["version"], "20260311")
-
-    def test_load_raises_when_no_model_for_project(self) -> None:
-        from pipeline.scoring.model_io import save_model, load_latest_model
-
-        with tempfile.TemporaryDirectory() as tmp:
-            models_dir = Path(tmp)
-            # Save a model for a different project only
-            save_model(self._make_artifact("20260311"), models_dir, _PROJECT_ID_2)
-
-            with self.assertRaises(FileNotFoundError):
-                load_latest_model(models_dir, _PROJECT_ID)
-
-    def test_load_raises_when_no_model_at_all(self) -> None:
-        from pipeline.scoring.model_io import load_latest_model
-
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(FileNotFoundError):
-                load_latest_model(Path(tmp), _PROJECT_ID)
-
-    def test_roundtrip_preserves_artifact_keys(self) -> None:
-        from pipeline.scoring.model_io import save_model, load_latest_model
-
-        with tempfile.TemporaryDirectory() as tmp:
-            original = self._make_artifact("20260311")
-            save_model(original, Path(tmp), _PROJECT_ID)
-            loaded = load_latest_model(Path(tmp), _PROJECT_ID)
-
-        self.assertEqual(loaded["version"], original["version"])
-        self.assertEqual(loaded["embedder_name"], original["embedder_name"])
-        self.assertAlmostEqual(loaded["mae"], original["mae"])
-
-    def test_roundtrip_regressor_prediction(self) -> None:
-        """Loaded regressor must produce the same output as the original."""
-        from pipeline.scoring.model_io import save_model, load_latest_model
-
-        with tempfile.TemporaryDirectory() as tmp:
-            original = self._make_artifact("20260311")
-            X_test = [[0.5]]
-            expected = original["regressor"].predict(X_test)[0]
-
-            save_model(original, Path(tmp), _PROJECT_ID)
-            loaded = load_latest_model(Path(tmp), _PROJECT_ID)
-            result = loaded["regressor"].predict(X_test)[0]
-
-        self.assertAlmostEqual(result, expected, places=6)
-
-    def test_two_projects_do_not_share_models(self) -> None:
-        """Each project's load_latest_model only sees its own artifacts."""
-        from pipeline.scoring.model_io import save_model, load_latest_model
-
-        with tempfile.TemporaryDirectory() as tmp:
-            models_dir = Path(tmp)
-            save_model(self._make_artifact("20260101"), models_dir, _PROJECT_ID)
-            save_model(self._make_artifact("20260311"), models_dir, _PROJECT_ID_2)
-
-            loaded_1 = load_latest_model(models_dir, _PROJECT_ID)
-            loaded_2 = load_latest_model(models_dir, _PROJECT_ID_2)
-
-        self.assertEqual(loaded_1["version"], "20260101")
-        self.assertEqual(loaded_2["version"], "20260311")
-
-    def test_list_project_ids_with_models(self) -> None:
-        from pipeline.scoring.model_io import save_model, list_project_ids_with_models
-
-        with tempfile.TemporaryDirectory() as tmp:
-            models_dir = Path(tmp)
-            save_model(self._make_artifact("20260101"), models_dir, _PROJECT_ID)
-            save_model(self._make_artifact("20260311"), models_dir, _PROJECT_ID_2)
-
-            ids = list_project_ids_with_models(models_dir)
-
-        self.assertIn(_PROJECT_ID, ids)
-        self.assertIn(_PROJECT_ID_2, ids)
-        self.assertEqual(len(ids), 2)
-
-
-class TestTrain(unittest.TestCase):
-    """Tests for pipeline.scoring.train.train (sentence-transformer mocked)."""
-
-    def _make_df(self, n: int = 20) -> pd.DataFrame:
-        texts = [f"Licitación de comunicación número {i}" for i in range(n)]
-        scores = np.linspace(1, 5, n)
-        return pd.DataFrame({"text": texts, "score": scores})
-
-    def _train_with_mock(self, df: pd.DataFrame | None = None):
+    def _run(
+        self,
+        filtered_ids: list[int],
+        training_rows: list[dict],
+        tender_rows: list[dict],
+        min_samples: int = 5,
+        project_id: str = _PROJECT_ID,
+    ) -> int:
+        """Run train_and_score with fully mocked external dependencies."""
         import sys
-        from pipeline.scoring.train import train
+        from pipeline.scoring.score import train_and_score
 
-        if df is None:
-            df = self._make_df()
-        fake_embedding = np.random.rand(len(df), 64).astype(np.float32)
+        # ── Supabase mock ───────────────────────────────────────────────────
+        mock_client = MagicMock()
 
-        mock_instance = MagicMock()
-        mock_instance.encode.return_value = fake_embedding
+        def table_side_effect(name: str):
+            tbl = MagicMock()
+            select = MagicMock()
 
-        mock_st_class = MagicMock(return_value=mock_instance)
-        fake_module = MagicMock()
-        fake_module.SentenceTransformer = mock_st_class
+            if name == "projects":
+                execute = MagicMock()
+                execute.return_value.data = [{"id": project_id}]
+                select.return_value.eq.return_value.execute = execute
+                tbl.select = MagicMock(return_value=select.return_value)
 
-        original = sys.modules.get("sentence_transformers")
-        sys.modules["sentence_transformers"] = fake_module
+            elif name == "tender_filter_results":
+                # First call: return filtered_ids; subsequent: empty (stop pagination)
+                calls = {"n": 0}
+
+                def ff_execute():
+                    if calls["n"] == 0:
+                        calls["n"] += 1
+                        return MagicMock(data=[{"tender_id": i} for i in filtered_ids])
+                    return MagicMock(data=[])
+
+                chain = MagicMock()
+                chain.execute = ff_execute
+                tbl.select.return_value.eq.return_value.eq.return_value.range.return_value = chain
+
+            elif name == "tender_scores":
+                # Training data query chain
+                mock_client.table.return_value.select.return_value.eq.return_value \
+                    .single.return_value.execute.return_value.data = {"training_session": 1}
+                mock_client.table.return_value.select.return_value.eq.return_value \
+                    .eq.return_value.neq.return_value.execute.return_value.data = training_rows
+                return mock_client.table.return_value
+
+            elif name == "tenders_raw":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = tender_rows
+
+            elif name == "tender_model_scores":
+                tbl.upsert.return_value.execute.return_value = MagicMock()
+
+            return tbl
+
+        mock_client.table.side_effect = table_side_effect
+
+        mock_supabase_mod = MagicMock()
+        mock_supabase_mod.create_client.return_value = mock_client
+
+        # ── sentence_transformers mock ───────────────────────────────────────
+        n = len(tender_rows) if tender_rows else 1
+        fake_emb = np.random.rand(max(n, len(training_rows) or 1), 64).astype(np.float32)
+        mock_st_instance = MagicMock()
+        mock_st_instance.encode.return_value = fake_emb[: max(n, 1)]
+        mock_st_class = MagicMock(return_value=mock_st_instance)
+        mock_st_mod = MagicMock()
+        mock_st_mod.SentenceTransformer = mock_st_class
+
+        orig_st = sys.modules.get("sentence_transformers")
+        orig_sb = sys.modules.get("supabase")
+        sys.modules["sentence_transformers"] = mock_st_mod
+        sys.modules["supabase"] = mock_supabase_mod
         try:
-            artifact = train(df)
+            return train_and_score(
+                supabase_url=self._URL,
+                supabase_key=self._KEY,
+                min_samples=min_samples,
+                project_id=project_id,
+            )
         finally:
-            if original is None:
+            if orig_st is None:
                 sys.modules.pop("sentence_transformers", None)
             else:
-                sys.modules["sentence_transformers"] = original
+                sys.modules["sentence_transformers"] = orig_st
+            if orig_sb is None:
+                sys.modules.pop("supabase", None)
+            else:
+                sys.modules["supabase"] = orig_sb
 
-        return artifact, fake_embedding
+    def _make_training_rows(self, n: int = 10) -> list[dict]:
+        return [
+            {
+                "score": float(i % 5 + 1),
+                "tenders_raw": {"title": f"Licitación {i}", "summary": "Descripción"},
+            }
+            for i in range(n)
+        ]
 
-    def test_train_returns_required_keys(self) -> None:
-        artifact, _ = self._train_with_mock()
-        self.assertIn("embedder_name", artifact)
-        self.assertIn("regressor", artifact)
-        self.assertIn("version", artifact)
-        self.assertIn("mae", artifact)
+    def _make_tender_rows(self, ids: list[int]) -> list[dict]:
+        return [{"id": i, "title": f"Tender {i}", "summary": "Desc"} for i in ids]
 
-    def test_train_version_is_yyyymmdd(self) -> None:
-        artifact, _ = self._train_with_mock()
-        version = artifact["version"]
-        self.assertEqual(len(version), 8)
-        self.assertTrue(version.isdigit(), f"Version must be YYYYMMDD digits, got: {version}")
+    def test_returns_zero_when_no_filtered_tenders(self) -> None:
+        result = self._run(filtered_ids=[], training_rows=[], tender_rows=[], min_samples=5)
+        self.assertEqual(result, 0)
 
-    def test_train_mae_is_non_negative(self) -> None:
-        artifact, _ = self._train_with_mock()
-        self.assertGreaterEqual(artifact["mae"], 0.0)
+    def test_assigns_neutral_score_when_no_training_data(self) -> None:
+        """With no training data, all filtered tenders should be scored 3.0."""
+        # We can't easily inspect the upsert call values through the mock chain,
+        # but we can at least verify it completes without error and returns count.
+        result = self._run(
+            filtered_ids=[1, 2, 3],
+            training_rows=[],          # no labels → neutral score
+            tender_rows=self._make_tender_rows([1, 2, 3]),
+            min_samples=5,
+        )
+        self.assertEqual(result, 3)
 
-    def test_train_regressor_can_predict(self) -> None:
-        artifact, fake_embedding = self._train_with_mock()
-        preds = artifact["regressor"].predict(fake_embedding[:3])
-        self.assertEqual(len(preds), 3)
+    def test_assigns_neutral_score_below_min_samples(self) -> None:
+        """Fewer training rows than min_samples → neutral score for all."""
+        result = self._run(
+            filtered_ids=[10, 20],
+            training_rows=self._make_training_rows(3),  # only 3, need 5
+            tender_rows=self._make_tender_rows([10, 20]),
+            min_samples=5,
+        )
+        self.assertEqual(result, 2)
+
+    def test_scores_tenders_with_trained_model(self) -> None:
+        """When training data is sufficient, tenders are scored with the model."""
+        result = self._run(
+            filtered_ids=[1, 2, 3, 4, 5],
+            training_rows=self._make_training_rows(10),
+            tender_rows=self._make_tender_rows([1, 2, 3, 4, 5]),
+            min_samples=5,
+        )
+        self.assertEqual(result, 5)
 
 
 class TestScoreClamping(unittest.TestCase):

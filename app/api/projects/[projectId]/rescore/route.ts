@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 
 interface Params {
   params: Promise<{ projectId: string }>;
@@ -47,8 +47,13 @@ export async function POST(_request: Request, { params }: Params) {
     .single();
   if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
+  // Use the admin client for deletes: tender_model_scores and tender_filter_results
+  // have no RLS DELETE policies, so the user-scoped client would silently delete
+  // 0 rows. Authorization has already been verified above.
+  const adminSupabase = await createAdminClient();
+
   // Clear existing model scores for this project so the pipeline re-scores them
-  const { error: scoresError } = await supabase
+  const { error: scoresError } = await adminSupabase
     .from("tender_model_scores")
     .delete()
     .eq("project_id", projectId);
@@ -57,7 +62,7 @@ export async function POST(_request: Request, { params }: Params) {
   }
 
   // Clear existing filter results for this project so the pipeline re-filters them
-  const { error: filterError } = await supabase
+  const { error: filterError } = await adminSupabase
     .from("tender_filter_results")
     .delete()
     .eq("project_id", projectId);

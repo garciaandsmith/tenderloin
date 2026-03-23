@@ -8,11 +8,10 @@ interface Params {
 /**
  * POST /api/projects/[projectId]/refresh
  *
- * Clears existing model scores AND filter results for the project, then
- * triggers the score.yml workflow (filter → score).  Clearing filter results
- * forces a full re-evaluation against the current project filter config so
- * that tenders whose status changed due to filter updates are correctly
- * included or excluded when the scoring step runs.
+ * Clears existing model scores for the project, then triggers the score.yml
+ * workflow (filter → score).  Filter results are intentionally preserved so
+ * the filter step only processes new tenders incrementally (fast), rather than
+ * re-scanning the entire tender history.
  *
  * Admin or project member only.
  */
@@ -50,6 +49,9 @@ export async function POST(_request: Request, { params }: Params) {
 
   // Clear existing model scores for this project so the scoring pipeline
   // re-evaluates all active tenders with the freshly trained model.
+  // Filter results are intentionally NOT cleared here: the daily filter.yml
+  // keeps tender_filter_results current, and clearing them would force
+  // score.yml to re-evaluate the entire tender history from scratch (slow).
   const { error: scoresError } = await adminSupabase
     .from("tender_model_scores")
     .delete()
@@ -57,22 +59,6 @@ export async function POST(_request: Request, { params }: Params) {
   if (scoresError) {
     return NextResponse.json(
       { error: `Failed to clear scores: ${scoresError.message}` },
-      { status: 500 }
-    );
-  }
-
-  // Also clear filter results so the filter step re-evaluates ALL tenders
-  // against the current project filter config.  Without this, tenders that
-  // were evaluated before a filter change (and thus have stale passed=false
-  // entries) would never be scored even though they now pass the updated
-  // filters — causing them to appear as "Pendiente" in the inbox forever.
-  const { error: filterError } = await adminSupabase
-    .from("tender_filter_results")
-    .delete()
-    .eq("project_id", projectId);
-  if (filterError) {
-    return NextResponse.json(
-      { error: `Failed to clear filter results: ${filterError.message}` },
       { status: 500 }
     );
   }

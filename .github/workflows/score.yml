@@ -2,7 +2,8 @@ name: Score Inbox Tenders
 run-name: "score:${{ inputs.project_id || 'all' }}"
 
 on:
-  # Trigger manually from the GitHub Actions UI or via API (e.g. from the Actualizar Inbox button)
+  # Triggered automatically when a user submits a training score (via API),
+  # or manually from the GitHub Actions UI.
   workflow_dispatch:
     inputs:
       project_id:
@@ -12,7 +13,7 @@ on:
 
 jobs:
   score:
-    name: Filter → Score
+    name: Filter → Train → Score
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,10 +31,9 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
+          pip install -r pipeline/requirements.txt
 
       # ── Step 1: Filter ─────────────────────────────────────────────────────
-      # Catches any tenders not yet evaluated since the last daily filter run.
       - name: Apply per-project hard filters
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -46,19 +46,10 @@ jobs:
             python -m pipeline.run_filter
           fi
 
-      # ── Step 2: Score ──────────────────────────────────────────────────────
-      # Applies the existing trained model — training is a separate process.
-      - name: Download latest scoring models
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release download scoring-model-latest \
-            --repo ${{ github.repository }} \
-            --pattern "scoring_*_v????????.pkl" \
-            --dir models \
-            --clobber || echo "No model release found yet — scoring step will be skipped."
-
-      - name: Score active tenders (per project)
+      # ── Step 2: Train + Score ──────────────────────────────────────────────
+      # Trains on the project's human labels in memory, then scores all
+      # filtered tenders immediately — no model files or GitHub Releases needed.
+      - name: Train models and score tenders
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

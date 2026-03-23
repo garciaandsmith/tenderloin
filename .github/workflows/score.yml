@@ -2,8 +2,8 @@ name: Score Inbox Tenders
 run-name: "score:${{ inputs.project_id || 'all' }}"
 
 on:
-  # Triggered automatically when a user submits a training score (via API),
-  # or manually from the GitHub Actions UI.
+  # Triggered automatically by retrain.yml after a new model is saved,
+  # or manually from the GitHub Actions UI (e.g. Actualizar Inbox).
   workflow_dispatch:
     inputs:
       project_id:
@@ -13,7 +13,7 @@ on:
 
 jobs:
   score:
-    name: Filter → Train → Score
+    name: Filter → Score
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -46,10 +46,10 @@ jobs:
             python -m pipeline.run_filter
           fi
 
-      # ── Step 2: Train + Score ──────────────────────────────────────────────
-      # Trains on the project's human labels in memory, then scores all
-      # filtered tenders immediately — no model files or GitHub Releases needed.
-      - name: Train models and score tenders
+      # ── Step 2: Score ──────────────────────────────────────────────────────
+      # Loads the trained model from Supabase Storage and applies it.
+      # Training is a separate step — see retrain.yml.
+      - name: Score tenders
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

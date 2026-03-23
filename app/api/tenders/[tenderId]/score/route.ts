@@ -57,7 +57,7 @@ export async function POST(request: Request, { params }: Params) {
 
   if (ghToken && ghOwner && ghRepo) {
     fetch(
-      `https://api.github.com/repos/${ghOwner}/${ghRepo}/actions/workflows/score.yml/dispatches`,
+      `https://api.github.com/repos/${ghOwner}/${ghRepo}/actions/workflows/retrain.yml/dispatches`,
       {
         method: "POST",
         headers: {

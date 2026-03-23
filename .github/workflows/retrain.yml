@@ -1,0 +1,63 @@
+name: Retrain Scoring Model
+run-name: "retrain:${{ inputs.project_id || 'all' }}"
+
+on:
+  # Triggered automatically via API when a user submits a training label.
+  # Also triggerable manually from the GitHub Actions UI.
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'Project UUID to retrain (leave empty to retrain all active projects)'
+        required: false
+        type: string
+
+jobs:
+  retrain:
+    name: Train scoring model
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write   # needed to dispatch score.yml after training
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r pipeline/requirements.txt
+
+      - name: Train and save model to Supabase Storage
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: |
+          if [ -n "$PROJECT_ID" ]; then
+            python -m pipeline.run_train --project-id "$PROJECT_ID"
+          else
+            python -m pipeline.run_train
+          fi
+
+      # Trigger scoring immediately so the inbox reflects the new model.
+      - name: Trigger score workflow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: |
+          gh workflow run score.yml \
+            --repo ${{ github.repository }} \
+            --ref main \
+            --field project_id="${PROJECT_ID:-}"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Retrain job failed at $(date -u) for project '${{ inputs.project_id }}'. Check the Actions log."

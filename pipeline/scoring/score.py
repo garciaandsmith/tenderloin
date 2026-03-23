@@ -1,16 +1,16 @@
-"""Train a scoring model on each project's human labels, then immediately
-score all tenders that passed hard filters — all in one pass.
+"""Score filtered tenders using each project's trained model.
 
 For each active project:
-  1. Load human-labeled training data from Supabase (current training session).
-  2. If ≥ min_samples: fit Ridge regression on sentence-transformer embeddings.
-  3. Score all tenders in tender_filter_results WHERE passed=true.
-  4. Upsert results to tender_model_scores.
+  1. Load the project's model artifact from Supabase Storage.
+  2. Find tenders that passed the project's hard filters
+     (``tender_filter_results`` WHERE passed=true).
+  3. Encode and write scores to ``tender_model_scores``.
 
-Projects without enough training data receive a neutral score of 3.0 so they
-still appear in the inbox while waiting for more labels.
+Projects without a model artifact are scored 3.0 (neutral) so they still
+appear in the inbox while waiting for the first retrain to complete.
 
-The filter step must run before this so tender_filter_results is populated.
+The filter step must run before this so ``tender_filter_results`` is populated.
+Training is a separate concern — see ``pipeline/run_train.py``.
 """
 from __future__ import annotations
 
@@ -18,29 +18,27 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_EMBEDDER_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 _MODEL_VERSION = "current"
 
 
-def train_and_score(
+def score_unscored_tenders(
     supabase_url: str,
     supabase_key: str,
-    min_samples: int = 5,
     batch_size: int = 200,
     project_id: str | None = None,
 ) -> int:
-    """Train and score tenders for one or all active projects.
+    """Score active tenders for one or all active projects.
 
-    Training and scoring happen in the same process with an in-memory model —
-    no model files or GitHub Releases involved.
+    Loads each project's model from Supabase Storage and applies it to all
+    tenders that passed hard filters.  If no model exists yet the tenders
+    receive a neutral score of 3.0 so they remain visible in the inbox.
 
-    Returns the total number of rows written to tender_model_scores.
+    Returns the total number of rows written to ``tender_model_scores``.
     """
     from supabase import create_client
     from sentence_transformers import SentenceTransformer
-    from sklearn.linear_model import Ridge
 
-    from pipeline.scoring.dataset import load_dataset_for_project
+    from pipeline.scoring.model_io import load_model
 
     client = create_client(supabase_url, supabase_key)
 
@@ -59,7 +57,15 @@ def train_and_score(
     total_written = 0
 
     for proj_id in project_ids:
-        logger.info("[%s] Starting train-and-score", proj_id)
+        # Load model — None means no model trained yet.
+        artifact = load_model(client, proj_id)
+        if artifact:
+            logger.info(
+                "[%s] Loaded model version=%s (MAE=%.3f)",
+                proj_id, artifact["version"], artifact.get("mae", float("nan")),
+            )
+        else:
+            logger.info("[%s] No model yet — tenders will receive neutral score 3.0", proj_id)
 
         # Collect tenders that passed hard filters (paginated).
         filtered_ids: set[int] = set()
@@ -86,29 +92,12 @@ def train_and_score(
 
         logger.info("[%s] %d tenders passed filters", proj_id, len(filtered_ids))
 
-        # Try to train a model from this project's human labels.
-        regressor = None
+        # Initialise embedder once per project if we have a model.
         embedder = None
-        try:
-            df = load_dataset_for_project(proj_id, supabase_url, supabase_key)
-            if len(df) >= min_samples:
-                logger.info("[%s] Training on %d labeled rows…", proj_id, len(df))
-                embedder = SentenceTransformer(_EMBEDDER_NAME)
-                embs = embedder.encode(
-                    df["text"].tolist(), show_progress_bar=False, batch_size=64
-                )
-                regressor = Ridge(alpha=1.0)
-                regressor.fit(embs, df["score"].values.astype(float))
-                logger.info("[%s] Model trained.", proj_id)
-            else:
-                logger.info(
-                    "[%s] Only %d rows (need %d) — assigning neutral score 3.0",
-                    proj_id, len(df), min_samples,
-                )
-        except ValueError:
-            logger.info("[%s] No training data — assigning neutral score 3.0", proj_id)
+        if artifact:
+            embedder = SentenceTransformer(artifact["embedder_name"])
 
-        # Score all filtered tenders in batches.
+        # Score in batches.
         ids_list = sorted(filtered_ids)
         project_written = 0
 
@@ -124,17 +113,13 @@ def train_and_score(
             if not rows:
                 continue
 
-            if regressor is not None:
-                if embedder is None:
-                    embedder = SentenceTransformer(_EMBEDDER_NAME)
+            if artifact and embedder:
                 texts = [
                     f"{r.get('title', '')}. {r.get('summary', '')}".strip(". ")
                     for r in rows
                 ]
-                embeddings = embedder.encode(
-                    texts, show_progress_bar=False, batch_size=64
-                )
-                raw = regressor.predict(embeddings).tolist()
+                embeddings = embedder.encode(texts, show_progress_bar=False, batch_size=64)
+                raw = artifact["regressor"].predict(embeddings).tolist()
                 scores = [max(1.0, min(5.0, float(s))) for s in raw]
             else:
                 scores = [3.0] * len(rows)
@@ -153,7 +138,7 @@ def train_and_score(
             ).execute()
             project_written += len(rows)
 
-        logger.info("[%s] Wrote %d scores.", proj_id, project_written)
+        logger.info("[%s] Scored %d tenders.", proj_id, project_written)
         total_written += project_written
 
     logger.info("Scoring complete. Total written: %d", total_written)

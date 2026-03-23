@@ -1,13 +1,11 @@
-"""CLI entry point: train scoring models and score filtered tenders.
+"""CLI entry point: score filtered tenders using each project's trained model.
 
-For each active project:
-  1. Load human-labeled training data from Supabase.
-  2. If ≥ min_samples rows: fit a Ridge model in memory.
-  3. Score all tenders that passed hard filters.
-  4. Upsert results to tender_model_scores.
+Downloads each project's model from Supabase Storage and applies it to all
+tenders that passed hard filters.  Projects without a model yet receive a
+neutral score of 3.0 so they still appear in the inbox.
 
-The filter step (run_filter.py) must run before this so
-tender_filter_results is populated.
+The filter step (run_filter.py) must run before this.
+Training is a separate concern — see run_train.py.
 
 Requires: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.
 """
@@ -20,13 +18,7 @@ import os
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Train scoring models and score filtered tenders"
-    )
-    parser.add_argument(
-        "--min-samples",
-        type=int,
-        default=5,
-        help="Minimum human-labeled rows needed to train a model (default: 5)",
+        description="Score filtered tenders using each project's trained model"
     )
     parser.add_argument(
         "--batch-size",
@@ -57,12 +49,11 @@ def main() -> None:
             "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required."
         )
 
-    from pipeline.scoring.score import train_and_score
+    from pipeline.scoring.score import score_unscored_tenders
 
-    total = train_and_score(
+    total = score_unscored_tenders(
         supabase_url=supabase_url,
         supabase_key=supabase_key,
-        min_samples=args.min_samples,
         batch_size=args.batch_size,
         project_id=args.project_id or None,
     )

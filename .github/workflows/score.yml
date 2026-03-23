@@ -32,7 +32,32 @@ jobs:
           pip install --upgrade pip
           if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
 
-      # ── Step 1: Filter ─────────────────────────────────────────────────────
+      # ── Step 1: Reset (only when a specific project is targeted) ──────────
+      # When triggered via "Actualizar Inbox" for a specific project we want a
+      # full re-evaluation: clear stale filter results and model scores so the
+      # filter starts from scratch (max_evaluated_id = 0) and the scoring step
+      # re-scores every tender that now passes.  The Next.js /refresh route
+      # attempts the same delete but relies on SUPABASE_SERVICE_ROLE_KEY being
+      # available as a Next.js env var, which may not always be the case.
+      # Doing it here in the workflow guarantees the service-role key is present.
+      - name: Reset filter and score results for project
+        if: ${{ inputs.project_id != '' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: |
+          python - <<'EOF'
+          import os
+          from supabase import create_client
+          client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+          pid = os.environ["PROJECT_ID"]
+          r1 = client.table("tender_filter_results").delete().eq("project_id", pid).execute()
+          r2 = client.table("tender_model_scores").delete().eq("project_id", pid).execute()
+          print(f"Reset complete for project {pid}")
+          EOF
+
+      # ── Step 2: Filter ─────────────────────────────────────────────────────
       # Catches any tenders not yet evaluated since the last daily filter run.
       - name: Apply per-project hard filters
         env:

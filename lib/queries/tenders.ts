@@ -14,6 +14,26 @@ function applyHardFilters(query: any, filters: ProjectFilters | null): any {
   if (filters.cpv_codes && filters.cpv_codes.length > 0) {
     query = query.or(filters.cpv_codes.map((c: string) => `cpv.like.${c}%`).join(","));
   }
+  // Nullable extended fields: allow NULL (not yet captured from source) to pass through,
+  // matching the pipeline filter's semantics in filter.py.
+  if (filters.contract_types && filters.contract_types.length > 0) {
+    query = query.or(`contract_type.in.(${filters.contract_types.join(",")}),contract_type.is.null`);
+  }
+  if (filters.procedure_types && filters.procedure_types.length > 0) {
+    query = query.or(`procedure_type.in.(${filters.procedure_types.join(",")}),procedure_type.is.null`);
+  }
+  if (filters.buyer_types && filters.buyer_types.length > 0) {
+    query = query.or(`buyer_type.in.(${filters.buyer_types.join(",")}),buyer_type.is.null`);
+  }
+  if (filters.max_lot_count != null) {
+    query = query.or(`lot_count.lte.${filters.max_lot_count},lot_count.is.null`);
+  }
+  if (filters.min_contract_months != null) {
+    query = query.or(`duration_months.gte.${filters.min_contract_months},duration_months.is.null`);
+  }
+  if (filters.max_contract_months != null) {
+    query = query.or(`duration_months.lte.${filters.max_contract_months},duration_months.is.null`);
+  }
   return query;
 }
 

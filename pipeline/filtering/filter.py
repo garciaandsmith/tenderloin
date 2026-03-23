@@ -163,19 +163,23 @@ def _evaluate_tender(
         if not any(tender_cpv.startswith(c) for c in cfg["cpv_codes"]):
             reasons.append("cpv_mismatch")
 
-    # Contract type
+    # Contract type — NULL means the field was not captured from the source;
+    # treat as unknown rather than a mismatch.
     if cfg.get("contract_types"):
-        if tender.get("contract_type") not in cfg["contract_types"]:
+        ct = tender.get("contract_type")
+        if ct is not None and ct not in cfg["contract_types"]:
             reasons.append("contract_type_mismatch")
 
-    # Procedure type
+    # Procedure type — same NULL semantics
     if cfg.get("procedure_types"):
-        if tender.get("procedure_type") not in cfg["procedure_types"]:
+        pt = tender.get("procedure_type")
+        if pt is not None and pt not in cfg["procedure_types"]:
             reasons.append("procedure_type_mismatch")
 
-    # Buyer type
+    # Buyer type — same NULL semantics
     if cfg.get("buyer_types"):
-        if tender.get("buyer_type") not in cfg["buyer_types"]:
+        bt = tender.get("buyer_type")
+        if bt is not None and bt not in cfg["buyer_types"]:
             reasons.append("buyer_type_mismatch")
 
     # Lot count

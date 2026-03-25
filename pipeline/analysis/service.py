@@ -9,6 +9,7 @@ For each pending record:
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -134,8 +135,9 @@ def _process_one(
             tender_id, tender.get("link"), exc,
         )
 
-    # Call the LLM with the appropriate analysis type
-    result = analyzer.analyze(
+    # Call the LLM with the appropriate analysis type (retries on transient errors)
+    result = _call_with_retry(
+        analyzer,
         title=tender["title"],
         summary=tender["summary"],
         link=tender["link"],
@@ -161,6 +163,22 @@ def _process_one(
         analysis_id, analysis_type, tender_id,
     )
     return 1
+
+
+def _call_with_retry(analyzer, *, max_attempts: int = 3, **kwargs):
+    """Call analyzer.analyze(**kwargs) with exponential-backoff retries."""
+    for attempt in range(max_attempts):
+        try:
+            return analyzer.analyze(**kwargs)
+        except Exception as exc:
+            if attempt == max_attempts - 1:
+                raise
+            wait = 2 ** attempt  # 1s, 2s
+            logger.warning(
+                "LLM call failed (attempt %d/%d): %s — retrying in %ds",
+                attempt + 1, max_attempts, exc, wait,
+            )
+            time.sleep(wait)
 
 
 def _mark_error(client, analysis_id: int, error_message: str) -> None:

@@ -7,7 +7,9 @@ import Link from "next/link";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import ScoreBadge from "@/components/inbox/ScoreBadge";
 import ProcessButton from "@/components/inbox/ProcessButton";
+import AnalysisPoller from "@/components/inbox/AnalysisPoller";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Licitación — Tenderloin" };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -62,7 +64,8 @@ export default async function TenderDetailPage({ params }: Props) {
     supabase
       .from("tender_analysis")
       .select("*")
-      .eq("tender_id", tender.id),
+      .eq("tender_id", tender.id)
+      .eq("project_id", projectId),
     supabase
       .from("tender_model_scores")
       .select("model_score, model_version, scored_at")
@@ -83,10 +86,15 @@ export default async function TenderDetailPage({ params }: Props) {
   const canProcessAdmin =
     !adminAnalysis || adminAnalysis.status === "error";
 
+  const hasPendingAnalysis =
+    technicalAnalysis?.status === "pending" || technicalAnalysis?.status === "running" ||
+    adminAnalysis?.status === "pending" || adminAnalysis?.status === "running";
+
   const deadline = daysUntil(tender.deadline_at);
 
   return (
     <div className="max-w-3xl mx-auto">
+      <AnalysisPoller isActive={hasPendingAnalysis} />
       <div className="mb-6">
         <Link
           href={`/projects/${projectId}/inbox`}

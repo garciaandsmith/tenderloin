@@ -20,7 +20,7 @@ from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
-_TIMEOUT_SECONDS = 30
+_TIMEOUT_SECONDS = 60
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 
 

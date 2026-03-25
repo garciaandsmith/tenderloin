@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Zap } from "lucide-react";
 
@@ -25,6 +26,7 @@ export default function ProcessButton({
   analysisType,
   retrying,
 }: Props) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,10 @@ export default function ProcessButton({
 
       if (res.ok) {
         setDone(true);
-        setTimeout(() => window.location.reload(), 1000);
+        // Refresh the server component immediately so the pending state is visible.
+        // AnalysisPoller (rendered by the parent page) will continue polling every
+        // 15 s until the analysis reaches done or error.
+        router.refresh();
       } else {
         const data = await res.json();
         setError(data.error ?? "Error al iniciar el proceso");
@@ -56,7 +61,7 @@ export default function ProcessButton({
 
   if (done) {
     return (
-      <span className="text-sm text-green-600 font-medium">Procesando…</span>
+      <span className="text-sm text-muted-foreground">Análisis en curso…</span>
     );
   }
 

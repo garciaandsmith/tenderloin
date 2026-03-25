@@ -60,7 +60,8 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
       "*, tender_model_scores ( model_score, project_id, model_version ), tender_analysis!left ( status, project_id )"
     )
     .gt("deadline_at", new Date().toISOString())
-    .order("published_at", { ascending: false });
+    .order("published_at", { ascending: false })
+    .limit(500);
 
   query = applyHardFilters(query, filters);
 

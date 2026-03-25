@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getInboxTenders } from "@/lib/queries/tenders";
 import InboxList from "@/components/inbox/InboxList";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Bandeja de entrada — Tenderloin" };
 
 interface Props {

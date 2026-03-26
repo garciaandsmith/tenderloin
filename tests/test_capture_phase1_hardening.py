@@ -103,7 +103,9 @@ class CapturePhase1HardeningTests(unittest.TestCase):
             payload_path = Path(tmpdir) / "feed.xml"
             payload_path.write_text(
                 """<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:cbc=\"urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2\">
+<feed xmlns=\"http://www.w3.org/2005/Atom\"
+      xmlns:cbc=\"urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2\"
+      xmlns:cac=\"urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2\">
   <entry>
     <id>exp-atom-001</id>
     <title>Contrato Atom</title>
@@ -115,6 +117,14 @@ class CapturePhase1HardeningTests(unittest.TestCase):
     <cbc:NUTSCode>ES300</cbc:NUTSCode>
     <cbc:ItemClassificationCode>79341000</cbc:ItemClassificationCode>
     <cbc:TotalAmount>125000,50</cbc:TotalAmount>
+    <cac:ProcurementProject>
+      <cbc:TypeCode>5</cbc:TypeCode>
+    </cac:ProcurementProject>
+    <cbc:ProcedureCode>1</cbc:ProcedureCode>
+    <cac:ProcurementProjectLot><cbc:ID>1</cbc:ID></cac:ProcurementProjectLot>
+    <cac:ProcurementProjectLot><cbc:ID>2</cbc:ID></cac:ProcurementProjectLot>
+    <cbc:DurationMeasure unitCode=\"MON\">12</cbc:DurationMeasure>
+    <cbc:ContractingPartyTypeCode>5</cbc:ContractingPartyTypeCode>
   </entry>
 </feed>
 """,
@@ -132,6 +142,11 @@ class CapturePhase1HardeningTests(unittest.TestCase):
             self.assertEqual(tender.cpv, "79341000")
             self.assertAlmostEqual(tender.budget_amount or 0.0, 125000.50, places=2)
             self.assertIsNotNone(tender.deadline_at)
+            self.assertEqual(tender.contract_type, "services")
+            self.assertEqual(tender.procedure_type, "open")
+            self.assertEqual(tender.lot_count, 2)
+            self.assertEqual(tender.duration_months, 12)
+            self.assertEqual(tender.buyer_type, "local_entity")
 
 
 if __name__ == "__main__":

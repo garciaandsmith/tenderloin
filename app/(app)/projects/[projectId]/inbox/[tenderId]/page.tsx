@@ -8,15 +8,16 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import ScoreBadge from "@/components/inbox/ScoreBadge";
 import ProcessButton from "@/components/inbox/ProcessButton";
 import AnalysisPoller from "@/components/inbox/AnalysisPoller";
+import InboxSeenTracker from "@/components/inbox/InboxSeenTracker";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Licitación — Tenderloin" };
+export const metadata = { title: "Licitaci\u00f3n \u2014 Tenderloin" };
 
 const STATUS_LABELS: Record<string, string> = {
   PUB: "Publicada",
   ADJ: "Adjudicada",
   FOR: "Formalizada",
-  EV: "En evaluación",
+  EV: "En evaluaci\u00f3n",
   AN: "Anulada",
 };
 
@@ -24,7 +25,7 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
   services: "Servicios",
   supplies: "Suministros",
   works: "Obras",
-  concession: "Concesión",
+  concession: "Concesi\u00f3n",
 };
 
 const PROCEDURE_TYPE_LABELS: Record<string, string> = {
@@ -95,6 +96,7 @@ export default async function TenderDetailPage({ params }: Props) {
   return (
     <div className="max-w-3xl mx-auto">
       <AnalysisPoller isActive={hasPendingAnalysis} />
+      <InboxSeenTracker tenderId={tender.id} projectId={projectId} />
       <div className="mb-6">
         <Link
           href={`/projects/${projectId}/inbox`}
@@ -126,22 +128,22 @@ export default async function TenderDetailPage({ params }: Props) {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <Stat label="Contratante" value={tender.buyer_name} />
           <Stat label="Presupuesto estimado" value={formatBudget(tender.budget_amount)} />
-          <Stat label="Región" value={nutsLabel(tender.region) || tender.region} />
-          <Stat label="Código CPV" value={`${tender.cpv}${cpvLabel(tender.cpv) ? ` — ${cpvLabel(tender.cpv)}` : ""}`} />
+          <Stat label="Regi\u00f3n" value={nutsLabel(tender.region) || tender.region} />
+          <Stat label="C\u00f3digo CPV" value={`${tender.cpv}${cpvLabel(tender.cpv) ? ` \u2014 ${cpvLabel(tender.cpv)}` : ""}`} />
           <Stat
             label="Tipo de contrato"
-            value={CONTRACT_TYPE_LABELS[tender.contract_type ?? ""] ?? tender.contract_type ?? "—"}
+            value={CONTRACT_TYPE_LABELS[tender.contract_type ?? ""] ?? tender.contract_type ?? "\u2014"}
           />
           <Stat
             label="Tipo de procedimiento"
-            value={PROCEDURE_TYPE_LABELS[tender.procedure_type ?? ""] ?? tender.procedure_type ?? "—"}
+            value={PROCEDURE_TYPE_LABELS[tender.procedure_type ?? ""] ?? tender.procedure_type ?? "\u2014"}
           />
           <Stat
             label="Estado"
-            value={STATUS_LABELS[tender.status ?? ""] ?? tender.status ?? "—"}
+            value={STATUS_LABELS[tender.status ?? ""] ?? tender.status ?? "\u2014"}
           />
           <Stat
-            label="Plazo de presentación"
+            label="Plazo de presentaci\u00f3n"
             value={
               <span className={deadline.expired ? "text-destructive" : deadline.urgent ? "text-amber-600" : ""}>
                 {formatDate(tender.deadline_at)} ({deadline.label})
@@ -165,18 +167,18 @@ export default async function TenderDetailPage({ params }: Props) {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-sm text-primary underline underline-offset-4"
           >
-            Ver licitación en PLACSP <ExternalLink className="h-3 w-3" />
+            Ver licitaci\u00f3n en PLACSP <ExternalLink className="h-3 w-3" />
           </a>
         </div>
 
         {/* Analysis section */}
         <div className="pt-4 border-t space-y-6">
-          <h2 className="font-semibold">Análisis de documentos</h2>
+          <h2 className="font-semibold">An\u00e1lisis de documentos</h2>
 
           {/* Technical analysis */}
           <AnalysisPanel
-            title="Análisis técnico"
-            description="Servicios requeridos, actuaciones y requisitos del equipo (Pliego de Prescripciones Técnicas)."
+            title="An\u00e1lisis t\u00e9cnico"
+            description="Servicios requeridos, actuaciones y requisitos del equipo (Pliego de Prescripciones T\u00e9cnicas)."
             analysis={technicalAnalysis}
             canProcess={canProcessTechnical}
             tenderId={tender.id}
@@ -190,7 +192,7 @@ export default async function TenderDetailPage({ params }: Props) {
                   <div className="rounded-lg border p-4 space-y-3">
                     <h3 className="font-semibold text-sm">Condiciones del servicio</h3>
                     <AnalysisSection
-                      title="Descripción, actuaciones y equipo"
+                      title="Descripci\u00f3n, actuaciones y equipo"
                       content={technicalAnalysis.services_required}
                     />
                   </div>
@@ -210,8 +212,8 @@ export default async function TenderDetailPage({ params }: Props) {
 
           {/* Administrative analysis */}
           <AnalysisPanel
-            title="Análisis administrativo"
-            description="Condiciones legales y administrativas, solvencia, garantías y obligaciones (Pliego de Cláusulas Administrativas)."
+            title="An\u00e1lisis administrativo"
+            description="Condiciones legales y administrativas, solvencia, garant\u00edas y obligaciones (Pliego de Cl\u00e1usulas Administrativas)."
             analysis={adminAnalysis}
             canProcess={canProcessAdmin}
             tenderId={tender.id}
@@ -225,7 +227,7 @@ export default async function TenderDetailPage({ params }: Props) {
                   <div className="rounded-lg border p-4 space-y-3">
                     <h3 className="font-semibold text-sm">Condiciones administrativas</h3>
                     <AnalysisSection
-                      title="Entregables, obligaciones y criterios de valoración"
+                      title="Entregables, obligaciones y criterios de valoraci\u00f3n"
                       content={adminAnalysis.administrative_conditions}
                     />
                   </div>
@@ -248,8 +250,7 @@ export default async function TenderDetailPage({ params }: Props) {
   );
 }
 
-// ─── sub-components ───────────────────────────────────────────────────────────
-
+// \u2500\u2500\u2500 sub-components \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n
 function AnalysisPanel({
   title,
   description,
@@ -292,13 +293,13 @@ function AnalysisPanel({
 
       {(analysis?.status === "pending" || analysis?.status === "running") && (
         <div className="rounded-md bg-muted px-4 py-3 text-sm text-muted-foreground">
-          Análisis en curso… Vuelve en unos minutos para ver los resultados.
+          An\u00e1lisis en curso\u2026 Vuelve en unos minutos para ver los resultados.
         </div>
       )}
 
       {analysis?.status === "error" && (
         <div className="rounded-md bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
-          El análisis encontró un error. Puedes intentarlo de nuevo con el botón de arriba.
+          El an\u00e1lisis encontr\u00f3 un error. Puedes intentarlo de nuevo con el bot\u00f3n de arriba.
         </div>
       )}
 

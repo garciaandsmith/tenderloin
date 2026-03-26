@@ -6,6 +6,14 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import type { ProjectFilters } from "@/lib/types/app.types";
 import NutsSelector from "@/components/filters/NutsSelector";
 import CpvSelector from "@/components/filters/CpvSelector";
@@ -40,6 +48,11 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Confirmation modal state
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [preview, setPreview] = useState<{ current_scores: number; current_passed: number } | null>(null);
+  const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
+
   function toggle<T>(list: T[], setList: (v: T[]) => void, item: T) {
     setList(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
   }
@@ -57,7 +70,6 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setSaved(false);
     setError(null);
 
@@ -76,10 +88,33 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
       max_contract_months: maxContractMonths ? Number(maxContractMonths) : null,
     };
 
+    // Fetch preview counts before showing the confirmation modal
+    setLoading(true);
+    try {
+      const previewRes = await fetch(`/api/projects/${projectId}/filter-change-preview`);
+      if (previewRes.ok) {
+        const previewData = await previewRes.json();
+        setPreview(previewData);
+      }
+    } catch {
+      // preview fetch failure is non-fatal
+    }
+    setLoading(false);
+
+    setPendingPayload(payload);
+    setShowConfirm(true);
+  }
+
+  async function confirmSave() {
+    if (!pendingPayload) return;
+    setShowConfirm(false);
+    setLoading(true);
+    setError(null);
+
     const res = await fetch(`/api/projects/${projectId}/filters`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(pendingPayload),
     });
 
     if (!res.ok) {
@@ -90,13 +125,15 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
       router.refresh();
     }
     setLoading(false);
+    setPendingPayload(null);
+    setPreview(null);
   }
 
   const CONTRACT_TYPES = [
     { value: "services", label: "Servicios" },
     { value: "supplies", label: "Suministros" },
     { value: "works", label: "Obras" },
-    { value: "concession", label: "Concesión" },
+    { value: "concession", label: "Concesi\u00f3n" },
   ];
 
   const PROCEDURE_TYPES = [
@@ -107,18 +144,18 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
   ];
 
   const BUYER_TYPES = [
-    { value: "central_government", label: "Administración central" },
-    { value: "autonomous_community", label: "Comunidad autónoma" },
+    { value: "central_government", label: "Administraci\u00f3n central" },
+    { value: "autonomous_community", label: "Comunidad aut\u00f3noma" },
     { value: "local_entity", label: "Entidad local" },
-    { value: "public_entity", label: "Organismo público" },
+    { value: "public_entity", label: "Organismo p\u00fablico" },
   ];
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Budget */}
-      <CollapsibleSection title="Presupuesto (€)" defaultOpen>
+      <CollapsibleSection title="Presupuesto (\u20ac)" defaultOpen>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Mínimo">
+          <Field label="M\u00ednimo">
             <Input
               type="number"
               placeholder="40000"
@@ -127,10 +164,10 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
               disabled={readOnly}
             />
           </Field>
-          <Field label="Máximo (opcional)">
+          <Field label="M\u00e1ximo (opcional)">
             <Input
               type="number"
-              placeholder="Sin límite"
+              placeholder="Sin l\u00edmite"
               value={budgetMax}
               onChange={(e) => setBudgetMax(e.target.value)}
               disabled={readOnly}
@@ -140,12 +177,12 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
       </CollapsibleSection>
 
       {/* Regions */}
-      <CollapsibleSection title="Regiones (códigos NUTS)" defaultOpen>
+      <CollapsibleSection title="Regiones (c\u00f3digos NUTS)" defaultOpen>
         <NutsSelector selected={regions} onChange={setRegions} disabled={readOnly} />
       </CollapsibleSection>
 
       {/* CPV codes */}
-      <CollapsibleSection title="Códigos CPV" defaultOpen>
+      <CollapsibleSection title="C\u00f3digos CPV" defaultOpen>
         <CpvSelector selected={cpvCodes} onChange={setCpvCodes} disabled={readOnly} />
       </CollapsibleSection>
 
@@ -185,7 +222,7 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
       {/* Keywords include */}
       <CollapsibleSection title="Palabras clave incluidas">
         <p className="text-xs text-muted-foreground mb-2">
-          El título o resumen debe contener alguna de estas palabras.
+          El t\u00edtulo o resumen debe contener alguna de estas palabras.
         </p>
         <TagInput
           tags={keywordsInclude}
@@ -193,7 +230,7 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
           input={includeInput}
           onInputChange={setIncludeInput}
           onAdd={() => addKeyword(includeInput, setIncludeInput, keywordsInclude, setKeywordsInclude)}
-          placeholder="Añadir palabra clave…"
+          placeholder="A\u00f1adir palabra clave\u2026"
           disabled={readOnly}
         />
       </CollapsibleSection>
@@ -201,7 +238,7 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
       {/* Keywords exclude */}
       <CollapsibleSection title="Palabras clave excluidas">
         <p className="text-xs text-muted-foreground mb-2">
-          El título o resumen no debe contener ninguna de estas palabras.
+          El t\u00edtulo o resumen no debe contener ninguna de estas palabras.
         </p>
         <TagInput
           tags={keywordsExclude}
@@ -209,36 +246,36 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
           input={excludeInput}
           onInputChange={setExcludeInput}
           onAdd={() => addKeyword(excludeInput, setExcludeInput, keywordsExclude, setKeywordsExclude)}
-          placeholder="Añadir palabra excluida…"
+          placeholder="A\u00f1adir palabra excluida\u2026"
           disabled={readOnly}
         />
       </CollapsibleSection>
 
       {/* Lots & duration */}
-      <CollapsibleSection title="Lotes y duración del contrato">
+      <CollapsibleSection title="Lotes y duraci\u00f3n del contrato">
         <div className="grid grid-cols-3 gap-4">
-          <Field label="Máx. lotes">
+          <Field label="M\u00e1x. lotes">
             <Input
               type="number"
-              placeholder="Sin límite"
+              placeholder="Sin l\u00edmite"
               value={maxLotCount}
               onChange={(e) => setMaxLotCount(e.target.value)}
               disabled={readOnly}
             />
           </Field>
-          <Field label="Duración mín. (meses)">
+          <Field label="Duraci\u00f3n m\u00edn. (meses)">
             <Input
               type="number"
-              placeholder="—"
+              placeholder="\u2014"
               value={minContractMonths}
               onChange={(e) => setMinContractMonths(e.target.value)}
               disabled={readOnly}
             />
           </Field>
-          <Field label="Duración máx. (meses)">
+          <Field label="Duraci\u00f3n m\u00e1x. (meses)">
             <Input
               type="number"
-              placeholder="—"
+              placeholder="\u2014"
               value={maxContractMonths}
               onChange={(e) => setMaxContractMonths(e.target.value)}
               disabled={readOnly}
@@ -250,18 +287,55 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
       {!readOnly && (
         <div className="flex items-center gap-3 pt-4 border-t">
           <Button type="submit" disabled={loading}>
-            {loading ? "Guardando…" : "Guardar filtros"}
+            {loading ? "Comprobando\u2026" : "Guardar filtros"}
           </Button>
-          {saved && <span className="text-sm text-green-600">✓ Filtros guardados</span>}
+          {saved && <span className="text-sm text-green-600">\u2713 Filtros guardados. Recalculando inbox\u2026</span>}
           {error && <span className="text-sm text-destructive">{error}</span>}
         </div>
       )}
+
+      <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>\u00bfGuardar nuevos filtros?</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Al guardar, el sistema recalcular\u00e1 qu\u00e9 licitaciones pasan el filtro.
+                  El inbox se actualizar\u00e1 en los pr\u00f3ximos minutos.
+                </p>
+                {preview !== null && (
+                  <div className="rounded-md border bg-muted/40 px-4 py-3 space-y-1 text-foreground">
+                    <p>
+                      <span className="font-medium">{preview.current_passed}</span>{" "}
+                      licitaciones pasan el filtro actual.
+                    </p>
+                    {preview.current_scores > 0 && (
+                      <p>
+                        <span className="font-medium">{preview.current_scores}</span>{" "}
+                        puntuaciones de entrenamiento \u2014 las de licitaciones que sigan
+                        encajando con el nuevo filtro se conservar\u00e1n en la nueva sesi\u00f3n.
+                      </p>
+                    )}
+                  </div>
+                )}
+                <p>Esta acci\u00f3n no se puede deshacer.</p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfirm(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmSave}>Confirmar y guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }
 
-// ── Collapsible Section ────────────────────────────────────────────────────────
-
+// \u2500\u2500 Collapsible Section \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n
 function CollapsibleSection({
   title,
   children,
@@ -292,8 +366,7 @@ function CollapsibleSection({
   );
 }
 
-// ── Field ──────────────────────────────────────────────────────────────────────
-
+// \u2500\u2500 Field \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
@@ -303,8 +376,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-// ── CheckboxGroup ──────────────────────────────────────────────────────────────
-
+// \u2500\u2500 CheckboxGroup \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n
 function CheckboxGroup<T extends Record<string, string>>({
   items,
   selected,
@@ -343,8 +415,7 @@ function CheckboxGroup<T extends Record<string, string>>({
   );
 }
 
-// ── TagInput ───────────────────────────────────────────────────────────────────
-
+// \u2500\u2500 TagInput \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n
 function TagInput({
   tags,
   onRemove,
@@ -377,7 +448,7 @@ function TagInput({
                 onClick={() => onRemove(tag)}
                 className="hover:text-destructive transition-colors ml-1"
               >
-                ×
+                \u00d7
               </button>
             )}
           </span>
@@ -396,7 +467,7 @@ function TagInput({
             className="max-w-xs text-sm"
           />
           <Button type="button" size="sm" variant="outline" onClick={onAdd}>
-            Añadir
+            A\u00f1adir
           </Button>
         </div>
       )}

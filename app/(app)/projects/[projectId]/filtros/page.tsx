@@ -42,6 +42,7 @@ export default async function ProjectFiltrosPage({ params }: Props) {
         </p>
       </div>
       <ProjectFiltersForm
+        key={projectId}
         projectId={projectId}
         initialFilters={filters}
       />

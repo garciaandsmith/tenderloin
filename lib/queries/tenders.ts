@@ -119,16 +119,15 @@ export async function getTrainingTenderBatch(
   limit = 10
 ): Promise<TrainingTender[]> {
   const supabase = await createClient();
-  const trainingSession = await getTrainingSession(projectId);
   const now = new Date().toISOString();
 
-  // Limit to 500 to keep the NOT IN clause within HTTP GET URL size limits.
+  // Exclude tenders scored in ANY training session, not just the current one.
+  // A tender that has ever been labelled must not resurface as a training candidate.
   const { data: scoredRows } = await supabase
     .from("tender_scores")
     .select("tender_id")
     .eq("project_id", projectId)
-    .eq("training_session", trainingSession)
-    .limit(500);
+    .limit(2000);
 
   const scoredIds = (scoredRows ?? []).map((r) => r.tender_id);
   const allExcluded = [...new Set([...scoredIds, ...excludeIds])];

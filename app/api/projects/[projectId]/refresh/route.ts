@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
+import { dispatchWorkflow } from "@/lib/github/dispatch";
 
 interface Params {
   params: Promise<{ projectId: string }>;
@@ -8,10 +9,9 @@ interface Params {
 /**
  * POST /api/projects/[projectId]/refresh
  *
- * Clears existing model scores for the project, then triggers the score.yml
- * workflow (filter → score).  Filter results are intentionally preserved so
- * the filter step only processes new tenders incrementally (fast), rather than
- * re-scanning the entire tender history.
+ * Triggers the score.yml workflow to (re-)score active tenders for this project.
+ * The scoring pipeline is now additive and idempotent: it skips tenders already
+ * scored with the current model version, so no scores need to be deleted first.
  *
  * Admin or project member only.
  */
@@ -40,57 +40,13 @@ export async function POST(_request: Request, { params }: Params) {
     if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Use the admin client for the DELETE operations: tender_model_scores and
-  // tender_filter_results have no RLS DELETE policies, so the user-scoped
-  // client would silently delete 0 rows (Supabase skips rows the policy does
-  // not permit without returning an error).  Authorization has already been
-  // verified above, so bypassing RLS here is intentional and safe.
-  const adminSupabase = await createAdminClient();
-
-  // Clear existing model scores for this project so the scoring pipeline
-  // re-evaluates all active tenders with the freshly trained model.
-  // Filter results are intentionally NOT cleared here: the daily filter.yml
-  // keeps tender_filter_results current, and clearing them would force
-  // score.yml to re-evaluate the entire tender history from scratch (slow).
-  const { error: scoresError } = await adminSupabase
-    .from("tender_model_scores")
-    .delete()
-    .eq("project_id", projectId);
-  if (scoresError) {
+  try {
+    await dispatchWorkflow("score.yml", { project_id: projectId });
+  } catch (err) {
     return NextResponse.json(
-      { error: `Failed to clear scores: ${scoresError.message}` },
+      { error: (err as Error).message },
       { status: 500 }
     );
-  }
-
-  const token = process.env.GITHUB_TOKEN;
-  const owner = process.env.GITHUB_OWNER;
-  const repo = process.env.GITHUB_REPO;
-
-  if (!token || !owner || !repo) {
-    return NextResponse.json(
-      { error: "GitHub env vars not configured (GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO)" },
-      { status: 500 }
-    );
-  }
-
-  const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/actions/workflows/score.yml/dispatches`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ref: "main", inputs: { project_id: projectId } }),
-    }
-  );
-
-  if (!response.ok) {
-    const text = await response.text();
-    return NextResponse.json({ error: `GitHub API error: ${text}` }, { status: 502 });
   }
 
   return NextResponse.json({ ok: true });

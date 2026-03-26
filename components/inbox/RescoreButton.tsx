@@ -110,7 +110,7 @@ export default function RescoreButton({ projectId }: Props) {
         className="gap-2"
       >
         <RefreshCw className={`h-3.5 w-3.5 ${spinning ? "animate-spin" : ""}`} />
-        {triggering ? "Lanzando…" : isRunning ? "Actualizando…" : "Actualizar Inbox"}
+        {triggering ? "Lanzando\u2026" : isRunning ? "Puntuando\u2026" : "Refrescar Scoring"}
       </Button>
 
       <span className="text-xs text-muted-foreground">
@@ -127,16 +127,16 @@ export default function RescoreButton({ projectId }: Props) {
             rel="noopener noreferrer"
             className="underline underline-offset-2"
           >
-            En progreso…
+            En progreso\u2026
           </a>
         ) : workflowStatus?.status === "completed" ? (
           <>
             {workflowStatus.updated_at ? relativeTime(workflowStatus.updated_at) : ""}
             {workflowStatus.conclusion === "success" ? (
-              <span className="ml-1 text-green-600">✓</span>
+              <span className="ml-1 text-green-600">\u2713</span>
             ) : (
               <>
-                <span className="ml-1 text-destructive">✗</span>
+                <span className="ml-1 text-destructive">\u2717</span>
                 {workflowStatus.run_url && (
                   <a
                     href={workflowStatus.run_url}

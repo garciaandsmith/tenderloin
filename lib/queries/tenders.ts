@@ -13,74 +13,82 @@ async function getTrainingSession(projectId: string): Promise<number> {
 }
 
 /** Fetch tenders that passed the project's hard filters and have a future deadline.
- *  Reads from ``tender_filter_results`` (single source of truth) joined with
- *  ``tenders_raw``.  Model scores and analysis status are included. */
+ *  Two-step: IDs from tender_filter_results → full rows from tenders_raw.
+ *  Avoids embedded-resource filtering which is unreliable in Supabase JS v2. */
 export async function getInboxTenders(projectId: string): Promise<InboxTender[]> {
   const supabase = await createClient();
   const now = new Date().toISOString();
 
-  const { data, error } = await supabase
+  // Step 1 — Get passed tender IDs + inbox_seen_at.
+  // Fetch most recent 1000 by tender_id: active (future-deadline) tenders always have high IDs.
+  const { data: filterRows, error: filterError } = await supabase
     .from("tender_filter_results")
-    .select(
-      `inbox_seen_at,
-       tenders_raw!inner (
-         id, title, summary, link, published_at, deadline_at,
-         buyer_name, region, cpv, budget_amount, contract_type,
-         procedure_type, lot_count, duration_months, buyer_type,
-         status, external_id, source, created_at,
-         tender_model_scores ( model_score, project_id, model_version ),
-         tender_analysis!left ( status, project_id )
-       )`
-    )
+    .select("tender_id, inbox_seen_at")
     .eq("project_id", projectId)
     .eq("passed", true)
-    .gt("tenders_raw.deadline_at", now)
-    .order("published_at", { ascending: false, referencedTable: "tenders_raw" })
+    .order("tender_id", { ascending: false })
+    .limit(1000);
+
+  if (filterError) throw filterError;
+  if (!filterRows || filterRows.length === 0) return [];
+
+  const filteredIds = filterRows.map((r) => r.tender_id);
+  const seenAtMap = new Map(
+    filterRows.map((r) => [r.tender_id, (r.inbox_seen_at as string | null) ?? null])
+  );
+
+  // Step 2 — Fetch active tenders from tenders_raw.
+  const { data, error } = await supabase
+    .from("tenders_raw")
+    .select(
+      "*, tender_model_scores ( model_score, project_id, model_version ), tender_analysis!left ( status, project_id )"
+    )
+    .in("id", filteredIds)
+    .gt("deadline_at", now)
+    .order("published_at", { ascending: false })
     .limit(500);
 
   if (error) throw error;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mapped = (data ?? []).map((row: any) => {
-    const tender = row.tenders_raw as Record<string, unknown>;
-    const inbox_seen_at: string | null = row.inbox_seen_at ?? null;
-
-    const modelScores = Array.isArray(tender.tender_model_scores)
-      ? tender.tender_model_scores
-      : tender.tender_model_scores
-      ? [tender.tender_model_scores]
+  const mapped = (data ?? []).map((row) => {
+    const modelScores = Array.isArray(row.tender_model_scores)
+      ? row.tender_model_scores
+      : row.tender_model_scores
+      ? [row.tender_model_scores]
       : [];
 
-    const projectModelScore = (modelScores as { project_id: string; model_score: number; model_version: string }[])
+    const projectModelScore = (
+      modelScores as { project_id: string; model_score: number; model_version: string }[]
+    )
       .filter((s) => s.project_id === projectId)
       .sort((a, b) => b.model_version.localeCompare(a.model_version))[0];
 
-    const analyses = Array.isArray(tender.tender_analysis)
-      ? tender.tender_analysis
-      : tender.tender_analysis
-      ? [tender.tender_analysis]
+    const analyses = Array.isArray(row.tender_analysis)
+      ? row.tender_analysis
+      : row.tender_analysis
+      ? [row.tender_analysis]
       : [];
     const projectAnalysis = (analyses as { project_id: string; status: string }[]).find(
       (a) => a.project_id === projectId
     );
 
-    const { tender_model_scores: _tms, tender_analysis: _ta, ...tenderFields } = tender;
-    void _tms; void _ta;
+    const { tender_model_scores: _tms, tender_analysis: _ta, ...tender } =
+      row as Record<string, unknown>;
+    void _tms;
+    void _ta;
 
     return {
-      ...tenderFields,
+      ...(tender as Parameters<typeof Object.assign>[0]),
       model_score: projectModelScore?.model_score ?? null,
       human_score_avg: null,
       analysis_status: projectAnalysis?.status ?? null,
-      inbox_seen_at,
+      inbox_seen_at: seenAtMap.get(row.id as number) ?? null,
     } as InboxTender;
   });
 
-  // Sort by model_score DESC (nulls last), then by published_at DESC as tiebreaker.
+  // Sort by model_score DESC (nulls last), then published_at DESC as tiebreaker.
   return mapped.sort((a, b) => {
-    if (a.model_score !== null && b.model_score !== null) {
-      return b.model_score - a.model_score;
-    }
+    if (a.model_score !== null && b.model_score !== null) return b.model_score - a.model_score;
     if (a.model_score !== null) return -1;
     if (b.model_score !== null) return 1;
     return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
@@ -89,10 +97,10 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
 
 /** Fetch a batch of unscored tenders for the training queue.
  *  Returns up to `limit` OUTDATED tenders (past deadline) that passed the
- *  project's hard filters, have NOT yet been scored by this user in the current
- *  training session, and are not in the provided `excludeIds` list.
+ *  project's hard filters, have NOT yet been scored in the current training
+ *  session, and are not in the provided `excludeIds` list.
  *
- *  Reads from ``tender_filter_results`` as single source of truth. */
+ *  Two-step: IDs from tender_filter_results → rows from tenders_raw. */
 export async function getTrainingTenderBatch(
   projectId: string,
   excludeIds: number[] = [],
@@ -113,31 +121,37 @@ export async function getTrainingTenderBatch(
   const scoredIds = (scoredRows ?? []).map((r) => r.tender_id);
   const allExcluded = [...new Set([...scoredIds, ...excludeIds])];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query: any = supabase
+  // Step 1 — Get passed tender IDs (oldest first — more likely to be expired).
+  const { data: filterRows, error: filterError } = await supabase
     .from("tender_filter_results")
-    .select(
-      `tender_id,
-       tenders_raw!inner (
-         id, title, summary, link, buyer_name, budget_amount,
-         published_at, deadline_at, cpv, region, contract_type, procedure_type
-       )`
-    )
+    .select("tender_id")
     .eq("project_id", projectId)
     .eq("passed", true)
-    .lt("tenders_raw.deadline_at", now)
-    .order("deadline_at", { ascending: false, referencedTable: "tenders_raw" })
+    .order("tender_id", { ascending: true })
+    .limit(2000);
+
+  if (filterError) throw filterError;
+  if (!filterRows || filterRows.length === 0) return [];
+
+  const passedIds = filterRows
+    .map((r) => r.tender_id)
+    .filter((id) => !allExcluded.includes(id));
+
+  if (passedIds.length === 0) return [];
+
+  // Step 2 — Fetch expired tenders from tenders_raw.
+  const { data, error } = await supabase
+    .from("tenders_raw")
+    .select(
+      "id, title, summary, link, buyer_name, budget_amount, published_at, deadline_at, cpv, region, contract_type, procedure_type"
+    )
+    .in("id", passedIds)
+    .lt("deadline_at", now)
+    .order("deadline_at", { ascending: false })
     .limit(limit);
 
-  if (allExcluded.length > 0) {
-    query = query.not("tender_id", "in", `(${allExcluded.join(",")})`);
-  }
-
-  const { data, error } = await query;
   if (error) throw error;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (data ?? []).map((row: any) => row.tenders_raw as TrainingTender);
+  return (data ?? []) as TrainingTender[];
 }
 
 /** Fetch the score distribution (count per score 0-5) for a project,

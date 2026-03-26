@@ -298,31 +298,29 @@ export default function ProjectFiltersForm({ projectId, initialFilters, readOnly
         <DialogContent>
           <DialogHeader>
             <DialogTitle>¿Guardar nuevos filtros?</DialogTitle>
-            <DialogDescription asChild>
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <p>
-                  Al guardar, el sistema recalculará qué licitaciones pasan el filtro.
-                  El inbox se actualizará en los próximos minutos.
-                </p>
-                {preview !== null && (
-                  <div className="rounded-md border bg-muted/40 px-4 py-3 space-y-1 text-foreground">
-                    <p>
-                      <span className="font-medium">{preview.current_passed}</span>{" "}
-                      licitaciones pasan el filtro actual.
-                    </p>
-                    {preview.current_scores > 0 && (
-                      <p>
-                        <span className="font-medium">{preview.current_scores}</span>{" "}
-                        puntuaciones de entrenamiento — las de licitaciones que sigan
-                        encajando con el nuevo filtro se conservarán en la nueva sesión.
-                      </p>
-                    )}
-                  </div>
-                )}
-                <p>Esta acción no se puede deshacer.</p>
-              </div>
+            <DialogDescription>
+              Al guardar, el sistema recalculará qué licitaciones pasan el filtro.
+              El inbox se actualizará en los próximos minutos.
             </DialogDescription>
           </DialogHeader>
+          <div className="px-5 py-4 space-y-3 text-sm text-muted-foreground">
+            {preview !== null && (
+              <div className="rounded-md border bg-muted/40 px-4 py-3 space-y-1 text-foreground">
+                <p>
+                  <span className="font-medium">{preview.current_passed}</span>{" "}
+                  licitaciones pasan el filtro actual.
+                </p>
+                {preview.current_scores > 0 && (
+                  <p>
+                    <span className="font-medium">{preview.current_scores}</span>{" "}
+                    puntuaciones de entrenamiento — las de licitaciones que sigan
+                    encajando con el nuevo filtro se conservarán en la nueva sesión.
+                  </p>
+                )}
+              </div>
+            )}
+            <p>Esta acción no se puede deshacer.</p>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConfirm(false)}>
               Cancelar

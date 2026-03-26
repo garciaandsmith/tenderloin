@@ -271,7 +271,7 @@ export async function getScoredTenders(
       tender_id: row.tender_id,
       score: row.score,
       scored_at: row.scored_at,
-      title: t?.title ?? "(sin t\u00edtulo)",
+      title: t?.title ?? "(sin título)",
       cpv: t?.cpv ?? null,
       region: t?.region ?? null,
     } as ScoredTenderEntry;

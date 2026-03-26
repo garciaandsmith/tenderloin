@@ -1,41 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getProjectFilters } from "@/lib/queries/projects";
-import type { InboxTender, ScoreDistribution, ScoredTenderEntry, TestTender, TrainingTender, ProjectFilters } from "@/lib/types/app.types";
-
-/** Apply project hard-filters directly to a tenders_raw query builder.
- *  Eliminates the dependency on tender_filter_results (which is populated by the
- *  offline pipeline and may be empty until Phase 2 is implemented). */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function applyHardFilters(query: any, filters: ProjectFilters | null): any {
-  if (!filters) return query;
-  if (filters.budget_min != null) query = query.gte("budget_amount", filters.budget_min);
-  if (filters.budget_max != null) query = query.lte("budget_amount", filters.budget_max);
-  if (filters.regions && filters.regions.length > 0) query = query.in("region", filters.regions);
-  if (filters.cpv_codes && filters.cpv_codes.length > 0) {
-    query = query.or(filters.cpv_codes.map((c: string) => `cpv.like.${c}%`).join(","));
-  }
-  // Nullable extended fields: allow NULL (not yet captured from source) to pass through,
-  // matching the pipeline filter's semantics in filter.py.
-  if (filters.contract_types && filters.contract_types.length > 0) {
-    query = query.or(`contract_type.in.(${filters.contract_types.join(",")}),contract_type.is.null`);
-  }
-  if (filters.procedure_types && filters.procedure_types.length > 0) {
-    query = query.or(`procedure_type.in.(${filters.procedure_types.join(",")}),procedure_type.is.null`);
-  }
-  if (filters.buyer_types && filters.buyer_types.length > 0) {
-    query = query.or(`buyer_type.in.(${filters.buyer_types.join(",")}),buyer_type.is.null`);
-  }
-  if (filters.max_lot_count != null) {
-    query = query.or(`lot_count.lte.${filters.max_lot_count},lot_count.is.null`);
-  }
-  if (filters.min_contract_months != null) {
-    query = query.or(`duration_months.gte.${filters.min_contract_months},duration_months.is.null`);
-  }
-  if (filters.max_contract_months != null) {
-    query = query.or(`duration_months.lte.${filters.max_contract_months},duration_months.is.null`);
-  }
-  return query;
-}
+import type { InboxTender, ScoreDistribution, ScoredTenderEntry, TestTender, TrainingTender } from "@/lib/types/app.types";
 
 /** Fetch the current training session number for a project. */
 async function getTrainingSession(projectId: string): Promise<number> {
@@ -48,59 +12,67 @@ async function getTrainingSession(projectId: string): Promise<number> {
   return data?.training_session ?? 1;
 }
 
-/** Fetch tenders matching the project's hard filters with a future deadline.
- *  Ordered by published_at desc (model scores are populated by the offline pipeline). */
+/** Fetch tenders that passed the project's hard filters and have a future deadline.
+ *  Reads from ``tender_filter_results`` (single source of truth) joined with
+ *  ``tenders_raw``.  Model scores and analysis status are included. */
 export async function getInboxTenders(projectId: string): Promise<InboxTender[]> {
   const supabase = await createClient();
-  const filters = await getProjectFilters(projectId);
+  const now = new Date().toISOString();
 
-  let query = supabase
-    .from("tenders_raw")
+  const { data, error } = await supabase
+    .from("tender_filter_results")
     .select(
-      "*, tender_model_scores ( model_score, project_id, model_version ), tender_analysis!left ( status, project_id )"
+      `inbox_seen_at,
+       tenders_raw!inner (
+         id, title, summary, link, published_at, deadline_at,
+         buyer_name, region, cpv, budget_amount, contract_type,
+         procedure_type, lot_count, duration_months, buyer_type,
+         status, external_id, source, created_at,
+         tender_model_scores ( model_score, project_id, model_version ),
+         tender_analysis!left ( status, project_id )
+       )`
     )
-    .gt("deadline_at", new Date().toISOString())
-    .order("published_at", { ascending: false })
+    .eq("project_id", projectId)
+    .eq("passed", true)
+    .gt("tenders_raw.deadline_at", now)
+    .order("published_at", { ascending: false, referencedTable: "tenders_raw" })
     .limit(500);
 
-  query = applyHardFilters(query, filters);
-
-  const { data, error } = await query;
   if (error) throw error;
 
-  const mapped = (data ?? []).map((row) => {
-    const modelScores = Array.isArray(row.tender_model_scores)
-      ? row.tender_model_scores
-      : row.tender_model_scores
-      ? [row.tender_model_scores]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapped = (data ?? []).map((row: any) => {
+    const tender = row.tenders_raw as Record<string, unknown>;
+    const inbox_seen_at: string | null = row.inbox_seen_at ?? null;
+
+    const modelScores = Array.isArray(tender.tender_model_scores)
+      ? tender.tender_model_scores
+      : tender.tender_model_scores
+      ? [tender.tender_model_scores]
       : [];
 
-    const projectModelScore = modelScores
-      .filter((s: { project_id: string }) => s.project_id === projectId)
-      .sort(
-        (a: { model_version: string }, b: { model_version: string }) =>
-          b.model_version.localeCompare(a.model_version)
-      )[0];
+    const projectModelScore = (modelScores as { project_id: string; model_score: number; model_version: string }[])
+      .filter((s) => s.project_id === projectId)
+      .sort((a, b) => b.model_version.localeCompare(a.model_version))[0];
 
-    // Find analysis status for this specific project
-    const analyses = Array.isArray(row.tender_analysis)
-      ? row.tender_analysis
-      : row.tender_analysis
-      ? [row.tender_analysis]
+    const analyses = Array.isArray(tender.tender_analysis)
+      ? tender.tender_analysis
+      : tender.tender_analysis
+      ? [tender.tender_analysis]
       : [];
-    const projectAnalysis = analyses.find(
-      (a: { project_id: string }) => a.project_id === projectId
+    const projectAnalysis = (analyses as { project_id: string; status: string }[]).find(
+      (a) => a.project_id === projectId
     );
 
-    const { tender_model_scores: _tms, tender_analysis: _ta, ...tender } = row as Record<string, unknown>;
-    void _tms;
-    void _ta;
+    const { tender_model_scores: _tms, tender_analysis: _ta, ...tenderFields } = tender;
+    void _tms; void _ta;
 
     return {
-      ...(tender as Parameters<typeof Object.assign>[0]),
+      ...tenderFields,
       model_score: projectModelScore?.model_score ?? null,
       human_score_avg: null,
       analysis_status: projectAnalysis?.status ?? null,
+      inbox_seen_at,
     } as InboxTender;
   });
 
@@ -116,24 +88,21 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
 }
 
 /** Fetch a batch of unscored tenders for the training queue.
- *  Returns up to `limit` OUTDATED tenders (past deadline) matching the project's
- *  hard filters that have NOT yet been scored by ANY user in the current training
- *  session, and are not in the provided `excludeIds` list.
+ *  Returns up to `limit` OUTDATED tenders (past deadline) that passed the
+ *  project's hard filters, have NOT yet been scored by this user in the current
+ *  training session, and are not in the provided `excludeIds` list.
  *
- *  Training must use expired tenders so they never appear in the active inbox. */
+ *  Reads from ``tender_filter_results`` as single source of truth. */
 export async function getTrainingTenderBatch(
   projectId: string,
   excludeIds: number[] = [],
   limit = 10
 ): Promise<TrainingTender[]> {
   const supabase = await createClient();
-  const [filters, trainingSession] = await Promise.all([
-    getProjectFilters(projectId),
-    getTrainingSession(projectId),
-  ]);
+  const trainingSession = await getTrainingSession(projectId);
+  const now = new Date().toISOString();
 
   // Limit to 500 to keep the NOT IN clause within HTTP GET URL size limits.
-  // Exceeding ~700 IDs would produce a URL > 8 KB and cause a 414 error.
   const { data: scoredRows } = await supabase
     .from("tender_scores")
     .select("tender_id")
@@ -144,24 +113,31 @@ export async function getTrainingTenderBatch(
   const scoredIds = (scoredRows ?? []).map((r) => r.tender_id);
   const allExcluded = [...new Set([...scoredIds, ...excludeIds])];
 
-  let query = supabase
-    .from("tenders_raw")
-    .select("id, title, summary, link, buyer_name, budget_amount, published_at, deadline_at, cpv, region, contract_type, procedure_type")
-    // Outdated tenders only — past deadline, never active inbox items
-    .lt("deadline_at", new Date().toISOString())
-    .order("deadline_at", { ascending: false, nullsFirst: false })
-    .order("published_at", { ascending: false })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any = supabase
+    .from("tender_filter_results")
+    .select(
+      `tender_id,
+       tenders_raw!inner (
+         id, title, summary, link, buyer_name, budget_amount,
+         published_at, deadline_at, cpv, region, contract_type, procedure_type
+       )`
+    )
+    .eq("project_id", projectId)
+    .eq("passed", true)
+    .lt("tenders_raw.deadline_at", now)
+    .order("deadline_at", { ascending: false, referencedTable: "tenders_raw" })
     .limit(limit);
 
-  query = applyHardFilters(query, filters);
-
   if (allExcluded.length > 0) {
-    query = query.not("id", "in", `(${allExcluded.join(",")})`);
+    query = query.not("tender_id", "in", `(${allExcluded.join(",")})`);
   }
 
   const { data, error } = await query;
   if (error) throw error;
-  return (data ?? []) as TrainingTender[];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((row: any) => row.tenders_raw as TrainingTender);
 }
 
 /** Fetch the score distribution (count per score 0-5) for a project,
@@ -269,7 +245,7 @@ export async function getScoredTenders(
       tender_id: row.tender_id,
       score: row.score,
       scored_at: row.scored_at,
-      title: t?.title ?? "(sin título)",
+      title: t?.title ?? "(sin t\u00edtulo)",
       cpv: t?.cpv ?? null,
       region: t?.region ?? null,
     } as ScoredTenderEntry;

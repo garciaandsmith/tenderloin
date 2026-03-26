@@ -16,6 +16,7 @@ export interface InboxTender extends TenderRaw {
   model_score: number | null;
   human_score_avg: number | null;
   analysis_status: string | null; // 'pending' | 'running' | 'done' | 'error' | null
+  inbox_seen_at: string | null;   // set when user first opens the tender from the inbox
 }
 
 /** Tender with metadata for the Training section queue. */

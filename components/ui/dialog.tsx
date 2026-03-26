@@ -47,3 +47,11 @@ export function DialogDescription({ children }: { children: React.ReactNode }) {
     </RadixDialog.Description>
   );
 }
+
+export function DialogFooter({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-5 py-4 flex justify-end gap-2 border-t border-border">
+      {children}
+    </div>
+  );
+}

@@ -1,0 +1,45 @@
+name: Backfill Filter Results
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'Project UUID to backfill (required)'
+        required: true
+        type: string
+
+jobs:
+  backfill:
+    name: Full-rescan filter + score migration
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
+
+      - name: Full-rescan hard filters
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python -m pipeline.run_filter \
+            --full-rescan \
+            --project-id "${{ github.event.inputs.project_id }}"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Backfill job failed at $(date -u) for project ${{ github.event.inputs.project_id }}."

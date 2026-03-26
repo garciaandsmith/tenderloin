@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { dispatchWorkflow } from "@/lib/github/dispatch";
 
 export async function GET() {
   const supabase = await createClient();
@@ -50,6 +51,14 @@ export async function POST(request: Request) {
   await supabase
     .from("project_members")
     .insert({ project_id: data.id, user_id: user.id });
+
+  // Backfill all historical tenders through the (currently empty) filter for this project.
+  // Errors are non-fatal — the daily filter.yml will also pick it up.
+  try {
+    await dispatchWorkflow("backfill.yml", { project_id: data.id });
+  } catch {
+    // log but don't fail the project creation response
+  }
 
   return NextResponse.json(data, { status: 201 });
 }

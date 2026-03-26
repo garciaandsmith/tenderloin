@@ -33,6 +33,11 @@ class SupabaseRawTenderRepository:
                 "budget_amount": t.budget_amount,
                 "source": t.source,
                 "created_at": captured_at.isoformat(),
+                "contract_type": t.contract_type,
+                "procedure_type": t.procedure_type,
+                "lot_count": t.lot_count,
+                "duration_months": t.duration_months,
+                "buyer_type": t.buyer_type,
             }
             for t in tenders
         ]

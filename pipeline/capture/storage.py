@@ -41,6 +41,17 @@ class RawTenderRepository:
                 )
                 """
             )
+            for col, coltype in [
+                ("contract_type", "TEXT"),
+                ("procedure_type", "TEXT"),
+                ("lot_count", "INTEGER"),
+                ("duration_months", "INTEGER"),
+                ("buyer_type", "TEXT"),
+            ]:
+                try:
+                    conn.execute(f"ALTER TABLE tenders_raw ADD COLUMN {col} {coltype}")
+                except sqlite3.OperationalError:
+                    pass  # column already exists
 
     def upsert_many(self, tenders: Iterable[TenderRaw], captured_at: datetime) -> int:
         rows = [
@@ -57,6 +68,11 @@ class RawTenderRepository:
                 item.budget_amount,
                 item.source,
                 captured_at.isoformat(),
+                item.contract_type,
+                item.procedure_type,
+                item.lot_count,
+                item.duration_months,
+                item.buyer_type,
             )
             for item in tenders
         ]
@@ -79,8 +95,13 @@ class RawTenderRepository:
                     cpv,
                     budget_amount,
                     source,
-                    created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at,
+                    contract_type,
+                    procedure_type,
+                    lot_count,
+                    duration_months,
+                    buyer_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )

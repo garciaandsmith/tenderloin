@@ -20,6 +20,41 @@ from pipeline.capture.models import TenderRaw
 ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
 logger = logging.getLogger(__name__)
 
+# CODICE numeric codes → normalised English values used by the filter layer
+_CONTRACT_TYPE_MAP: dict[str, str] = {
+    "1": "works",
+    "2": "concession",
+    "3": "services",
+    "4": "supplies",
+    "5": "services",
+    "6": "concession",
+    "7": "services",
+    "8": "services",
+}
+
+_PROCEDURE_TYPE_MAP: dict[str, str] = {
+    "1": "open",
+    "2": "restricted",
+    "3": "negotiated",
+    "4": "negotiated",
+    "5": "open",
+    "6": "open",
+    "7": "minor",
+    "8": "open",
+}
+
+_BUYER_TYPE_MAP: dict[str, str] = {
+    "1": "central_government",
+    "2": "central_government",
+    "3": "central_government",
+    "4": "autonomous_community",
+    "5": "local_entity",
+    "6": "public_entity",
+    "7": "public_entity",
+    "8": "local_entity",
+    "9": "public_entity",
+}
+
 
 @dataclass(slots=True)
 class PlacspClientConfig:
@@ -209,6 +244,20 @@ class PlacspClient:
             budget_amount = _parse_float(
                 _find_first_text_by_localname(entry, ["TotalAmount", "BudgetAmount", "EstimatedOverallContractAmount"])
             )
+            contract_type = _normalise_contract_type(
+                _find_nested_text(entry, "ProcurementProject", "TypeCode")
+                or _find_first_text_by_localname(entry, ["ContractTypeCode"])
+            )
+            procedure_type = _normalise_procedure_type(
+                _find_first_text_by_localname(entry, ["ProcedureCode"])
+            )
+            lot_count = _count_by_localname(entry, "ProcurementProjectLot") or None
+            duration_months = _parse_int(
+                _find_first_text_by_localname(entry, ["DurationMeasure", "Duration"])
+            )
+            buyer_type = _normalise_buyer_type(
+                _find_first_text_by_localname(entry, ["ContractingPartyTypeCode", "PartyTypeCode"])
+            )
 
             tenders.append(
                 TenderRaw(
@@ -223,6 +272,11 @@ class PlacspClient:
                     cpv=cpv,
                     budget_amount=budget_amount,
                     source=self.config.source_name,
+                    contract_type=contract_type,
+                    procedure_type=procedure_type,
+                    lot_count=lot_count,
+                    duration_months=duration_months,
+                    buyer_type=buyer_type,
                 )
             )
 
@@ -248,6 +302,11 @@ class PlacspClient:
                     cpv=str(item.get("cpv", "")),
                     budget_amount=_parse_float(item.get("budget_amount")),
                     source=self.config.source_name,
+                    contract_type=item.get("contract_type"),
+                    procedure_type=item.get("procedure_type"),
+                    lot_count=_parse_int(item.get("lot_count")),
+                    duration_months=_parse_int(item.get("duration_months")),
+                    buyer_type=item.get("buyer_type"),
                 )
             )
         return tenders
@@ -303,6 +362,32 @@ def _parse_datetime(value: str) -> Optional[datetime]:
         return parsedate_to_datetime(value)
     except (TypeError, ValueError):
         return None
+
+
+def _count_by_localname(node: ET.Element, local_name: str) -> int:
+    key = local_name.lower()
+    return sum(1 for el in node.iter() if _localname(el.tag).lower() == key)
+
+
+def _parse_int(value: object) -> Optional[int]:
+    if value in (None, ""):
+        return None
+    try:
+        return int(str(value).strip())
+    except (ValueError, TypeError):
+        return None
+
+
+def _normalise_contract_type(code: str) -> Optional[str]:
+    return _CONTRACT_TYPE_MAP.get(code.strip()) if code else None
+
+
+def _normalise_procedure_type(code: str) -> Optional[str]:
+    return _PROCEDURE_TYPE_MAP.get(code.strip()) if code else None
+
+
+def _normalise_buyer_type(code: str) -> Optional[str]:
+    return _BUYER_TYPE_MAP.get(code.strip()) if code else None
 
 
 def _parse_float(value: object) -> Optional[float]:

@@ -20,3 +20,8 @@ class TenderRaw:
     cpv: str
     budget_amount: Optional[float]
     source: str = "placsp"
+    contract_type: Optional[str] = None
+    procedure_type: Optional[str] = None
+    lot_count: Optional[int] = None
+    duration_months: Optional[int] = None
+    buyer_type: Optional[str] = None

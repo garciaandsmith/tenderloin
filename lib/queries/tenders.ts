@@ -13,8 +13,9 @@ async function getTrainingSession(projectId: string): Promise<number> {
 }
 
 /** Fetch tenders that passed the project's hard filters and have a future deadline.
- *  Two-step: IDs from tender_filter_results → full rows from tenders_raw.
- *  Avoids embedded-resource filtering which is unreliable in Supabase JS v2. */
+ *  Four-step: IDs from tender_filter_results → tender rows → model scores → analysis status.
+ *  Each query is a simple indexed lookup; avoids PostgREST embedded joins which were
+ *  timing out (PostgreSQL error 57014) due to full table scans on unindexed columns. */
 export async function getInboxTenders(projectId: string): Promise<InboxTender[]> {
   const supabase = await createClient();
   const now = new Date().toISOString();
@@ -37,54 +38,65 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
     filterRows.map((r) => [r.tender_id, (r.inbox_seen_at as string | null) ?? null])
   );
 
-  // Step 2 — Fetch active tenders from tenders_raw.
+  // Step 2 — Fetch active tender rows (no embedded joins).
   const { data, error } = await supabase
     .from("tenders_raw")
-    .select(
-      "*, tender_model_scores ( model_score, project_id, model_version ), tender_analysis!left ( status, project_id )"
-    )
+    .select("*")
     .in("id", filteredIds)
     .gt("deadline_at", now)
     .order("published_at", { ascending: false })
     .limit(500);
 
   if (error) throw error;
+  const tenderRows = data ?? [];
+  if (tenderRows.length === 0) return [];
 
-  const mapped = (data ?? []).map((row) => {
-    const modelScores = Array.isArray(row.tender_model_scores)
-      ? row.tender_model_scores
-      : row.tender_model_scores
-      ? [row.tender_model_scores]
-      : [];
+  const finalIds = tenderRows.map((r) => r.id);
 
-    const projectModelScore = (
-      modelScores as { project_id: string; model_score: number; model_version: string }[]
-    )
-      .filter((s) => s.project_id === projectId)
-      .sort((a, b) => b.model_version.localeCompare(a.model_version))[0];
+  // Step 3 — Fetch model scores for this project (indexed on project_id, tender_id).
+  const { data: msRows, error: msError } = await supabase
+    .from("tender_model_scores")
+    .select("tender_id, model_score, model_version")
+    .eq("project_id", projectId)
+    .in("tender_id", finalIds);
 
-    const analyses = Array.isArray(row.tender_analysis)
-      ? row.tender_analysis
-      : row.tender_analysis
-      ? [row.tender_analysis]
-      : [];
-    const projectAnalysis = (analyses as { project_id: string; status: string }[]).find(
-      (a) => a.project_id === projectId
-    );
+  if (msError) throw msError;
 
-    const { tender_model_scores: _tms, tender_analysis: _ta, ...tender } =
-      row as Record<string, unknown>;
-    void _tms;
-    void _ta;
+  // Keep highest model_version per tender.
+  const modelScoreMap = new Map<number, { model_score: number; model_version: string }>();
+  for (const ms of msRows ?? []) {
+    const tid = ms.tender_id as number;
+    const existing = modelScoreMap.get(tid);
+    if (!existing || ms.model_version.localeCompare(existing.model_version) > 0) {
+      modelScoreMap.set(tid, { model_score: ms.model_score, model_version: ms.model_version });
+    }
+  }
 
-    return {
-      ...(tender as Parameters<typeof Object.assign>[0]),
-      model_score: projectModelScore?.model_score ?? null,
-      human_score_avg: null,
-      analysis_status: projectAnalysis?.status ?? null,
-      inbox_seen_at: seenAtMap.get(row.id as number) ?? null,
-    } as InboxTender;
-  });
+  // Step 4 — Fetch analysis status for this project (indexed on project_id, tender_id).
+  const { data: analysisRows, error: aError } = await supabase
+    .from("tender_analysis")
+    .select("tender_id, status")
+    .eq("project_id", projectId)
+    .in("tender_id", finalIds);
+
+  if (aError) throw aError;
+
+  // First status found per tender (equivalent to existing find() behavior).
+  const analysisMap = new Map<number, string>();
+  for (const a of analysisRows ?? []) {
+    const tid = a.tender_id as number;
+    if (!analysisMap.has(tid)) {
+      analysisMap.set(tid, a.status);
+    }
+  }
+
+  const mapped = tenderRows.map((row) => ({
+    ...row,
+    model_score: modelScoreMap.get(row.id)?.model_score ?? null,
+    human_score_avg: null,
+    analysis_status: analysisMap.get(row.id) ?? null,
+    inbox_seen_at: seenAtMap.get(row.id) ?? null,
+  } as InboxTender));
 
   // Sort by model_score DESC (nulls last), then published_at DESC as tiebreaker.
   return mapped.sort((a, b) => {

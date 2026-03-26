@@ -32,6 +32,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Filter only this project UUID (default: all active projects)",
     )
+    parser.add_argument(
+        "--full-rescan",
+        action="store_true",
+        default=False,
+        help="Re-evaluate ALL tenders from scratch (ignores the ID cursor)",
+    )
     parser.add_argument("--log-level", default="INFO", help="Log level")
     return parser.parse_args()
 
@@ -58,6 +64,7 @@ def main() -> None:
         supabase_key=supabase_key,
         batch_size=args.batch_size,
         project_id=args.project_id or None,
+        full_rescan=args.full_rescan,
     )
     print("filter_result", summary)
 

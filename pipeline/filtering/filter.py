@@ -4,8 +4,13 @@ For each active project, every tender in ``tenders_raw`` is evaluated against
 the project's ``project_filters`` configuration.  Results are written to
 ``tender_filter_results`` (upserted so re-runs are idempotent).
 
-Only tenders that do NOT yet have a filter result for a given project are
-processed, so incremental daily runs are cheap.
+In *incremental* mode (default) only tenders with IDs higher than the
+maximum already-evaluated ID are processed — cheap for daily runs.
+
+In *full-rescan* mode every tender in ``tenders_raw`` is re-evaluated,
+overwriting ``passed``, ``discard_reasons``, and ``filter_version`` while
+preserving ``inbox_seen_at``.  Use this after a filter change or project
+creation to rebuild the complete filter index.
 """
 from __future__ import annotations
 
@@ -24,11 +29,14 @@ def run_filter_pipeline(
     supabase_key: str,
     batch_size: int = 500,
     project_id: str | None = None,
+    full_rescan: bool = False,
 ) -> dict[str, int]:
-    """Filter all new tenders for one or every active project.
+    """Filter tenders for one or every active project.
 
     If *project_id* is given only that project is processed.
-    Returns a dict mapping project_id → number of filter results written.
+    If *full_rescan* is True, ALL tenders are re-evaluated (ignoring the ID
+    cursor) and existing rows are updated in place.
+    Returns a dict mapping project_id -> number of filter results written.
     """
     from supabase import create_client
 
@@ -36,7 +44,10 @@ def run_filter_pipeline(
 
     if project_id:
         project_ids = [project_id]
-        logger.info("Running hard filters for project: %s", project_id)
+        logger.info(
+            "Running hard filters for project: %s (full_rescan=%s)",
+            project_id, full_rescan,
+        )
     else:
         projects_resp = (
             client.table("projects")
@@ -48,12 +59,15 @@ def run_filter_pipeline(
         if not project_ids:
             logger.info("No active projects found. Nothing to filter.")
             return {}
-        logger.info("Running hard filters for %d active project(s)", len(project_ids))
+        logger.info(
+            "Running hard filters for %d active project(s) (full_rescan=%s)",
+            len(project_ids), full_rescan,
+        )
 
     summary: dict[str, int] = {}
-    for project_id in project_ids:
-        written = _filter_project(client, project_id, batch_size)
-        summary[project_id] = written
+    for pid in project_ids:
+        written = _filter_project(client, pid, batch_size, full_rescan)
+        summary[pid] = written
 
     logger.info("Filter pipeline complete: %s", summary)
     return summary
@@ -63,13 +77,18 @@ def run_filter_pipeline(
 # Per-project helpers
 # ---------------------------------------------------------------------------
 
-def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
-    """Apply this project's filters to tenders not yet evaluated.
+def _filter_project(
+    client: Any,
+    project_id: str,
+    batch_size: int,
+    full_rescan: bool,
+) -> int:
+    """Apply this project's filters to tenders not yet evaluated (or all if full_rescan).
 
-    Uses the maximum already-evaluated tender ID as a cursor so that only
-    new tenders (higher IDs) are fetched — avoids scanning the entire table.
+    In incremental mode uses the maximum already-evaluated tender ID as a
+    cursor so only new tenders (higher IDs) are fetched.
+    In full_rescan mode starts from ID 0 and re-evaluates every tender.
     """
-
     # Load filter config (may be empty / not yet configured)
     filters_resp = (
         client.table("project_filters")
@@ -79,20 +98,23 @@ def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
         .execute()
     )
     filter_cfg: dict = filters_resp.data or {}
+    filter_version: int = int(filter_cfg.get("filter_version") or 1)
 
-    # Find the highest tender_id already evaluated for this project.
-    # Since tenders_raw.id is a bigserial, new tenders always have higher IDs,
-    # so we only need to evaluate tenders beyond this cursor.
-    max_resp = (
-        client.table("tender_filter_results")
-        .select("tender_id")
-        .eq("project_id", project_id)
-        .order("tender_id", desc=True)
-        .limit(1)
-        .execute()
-    )
-    max_evaluated_id: int = max_resp.data[0]["tender_id"] if max_resp.data else 0
-    logger.info("[%s] Max evaluated tender_id: %d", project_id, max_evaluated_id)
+    if full_rescan:
+        cursor_id = 0
+        logger.info("[%s] Full rescan — filter_version=%d", project_id, filter_version)
+    else:
+        # Find the highest tender_id already evaluated for this project.
+        max_resp = (
+            client.table("tender_filter_results")
+            .select("tender_id")
+            .eq("project_id", project_id)
+            .order("tender_id", desc=True)
+            .limit(1)
+            .execute()
+        )
+        cursor_id = max_resp.data[0]["tender_id"] if max_resp.data else 0
+        logger.info("[%s] Incremental — max evaluated tender_id: %d", project_id, cursor_id)
 
     offset = 0
     total_written = 0
@@ -104,7 +126,7 @@ def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
                 "id, title, summary, region, cpv, budget_amount, "
                 "contract_type, procedure_type, lot_count, duration_months, buyer_type"
             )
-            .gt("id", max_evaluated_id)
+            .gt("id", cursor_id)
             .order("id")
             .range(offset, offset + batch_size - 1)
             .execute()
@@ -114,9 +136,12 @@ def _filter_project(client: Any, project_id: str, batch_size: int) -> int:
             break
 
         results = [
-            _evaluate_tender(r, filter_cfg, project_id)
+            _evaluate_tender(r, filter_cfg, project_id, filter_version)
             for r in rows
         ]
+
+        # Upsert: update passed/discard_reasons/filter_version/evaluated_at on conflict.
+        # inbox_seen_at is NOT included so existing values are preserved.
         client.table("tender_filter_results").upsert(
             results,
             on_conflict="tender_id,project_id",
@@ -135,10 +160,12 @@ def _evaluate_tender(
     tender: dict,
     cfg: dict,
     project_id: str,
+    filter_version: int,
 ) -> dict:
     """Evaluate a single tender against filter config.
 
-    Returns a ``tender_filter_results`` row dict.
+    Returns a ``tender_filter_results`` row dict (without inbox_seen_at so
+    upserts preserve the existing value).
     """
     reasons: list[str] = []
 
@@ -163,8 +190,7 @@ def _evaluate_tender(
         if not any(tender_cpv.startswith(c) for c in cfg["cpv_codes"]):
             reasons.append("cpv_mismatch")
 
-    # Contract type — NULL means the field was not captured from the source;
-    # treat as unknown rather than a mismatch.
+    # Contract type — NULL means not captured; treat as unknown (pass through).
     if cfg.get("contract_types"):
         ct = tender.get("contract_type")
         if ct is not None and ct not in cfg["contract_types"]:
@@ -197,9 +223,7 @@ def _evaluate_tender(
             reasons.append("duration_above_max")
 
     # Keywords (case-insensitive, match against title + summary)
-    searchable = (
-        f"{tender.get('title', '')} {tender.get('summary', '')}".lower()
-    )
+    searchable = f"{tender.get('title', '')} {tender.get('summary', '')}".lower()
     if cfg.get("keywords_include"):
         if not any(kw.lower() in searchable for kw in cfg["keywords_include"]):
             reasons.append("keyword_include_miss")
@@ -208,8 +232,9 @@ def _evaluate_tender(
             reasons.append("keyword_exclude_hit")
 
     return {
-        "tender_id": tender["id"],
-        "project_id": project_id,
-        "passed": len(reasons) == 0,
+        "tender_id":      tender["id"],
+        "project_id":     project_id,
+        "passed":         len(reasons) == 0,
         "discard_reasons": reasons if reasons else None,
+        "filter_version": filter_version,
     }

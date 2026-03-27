@@ -5,6 +5,7 @@ import { formatDate } from "@/lib/utils/formatters";
 import Link from "next/link";
 import ProjectEditForm from "@/components/projects/ProjectEditForm";
 import MemberList from "@/components/projects/MemberList";
+import DeleteProjectButton from "@/components/projects/DeleteProjectButton";
 
 interface Props {
   params: Promise<{ projectId: string }>;
@@ -86,13 +87,14 @@ export default async function AdminProjectDetailPage({ params }: Props) {
         />
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex items-center justify-between">
         <Link
           href={`/projects/${project.id}/inbox`}
           className="text-sm text-primary underline underline-offset-4"
         >
           Ir al proyecto →
         </Link>
+        <DeleteProjectButton projectId={project.id} projectName={project.name} />
       </div>
     </div>
   );

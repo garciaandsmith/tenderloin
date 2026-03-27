@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getAllProjects } from "@/lib/queries/projects";
 import Link from "next/link";
 import { formatDate } from "@/lib/utils/formatters";
+import DeleteProjectButton from "@/components/projects/DeleteProjectButton";
 
 export const metadata = { title: "Proyectos — Admin — Tenderloin" };
 
@@ -74,6 +75,7 @@ export default async function AdminProjectsPage() {
                   >
                     Ver proyecto
                   </Link>
+                  <DeleteProjectButton projectId={p.id} projectName={p.name} />
                 </div>
               </div>
             </div>

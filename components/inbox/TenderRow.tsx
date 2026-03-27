@@ -5,13 +5,14 @@ import { formatBudget, formatDate, daysUntil } from "@/lib/utils/formatters";
 import ScoreBadge from "./ScoreBadge";
 import type { InboxTender } from "@/lib/types/app.types";
 import { cn } from "@/lib/utils";
-import { Star, Clock, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { Star, Clock, CheckCircle, AlertCircle, Loader2, X } from "lucide-react";
 
 interface Props {
   tender: InboxTender;
   projectId: string;
   isFavorited: boolean;
   onToggleFavorite: (id: number) => void;
+  onDismiss: (id: number) => void;
 }
 
 function AnalysisBadge({ status }: { status: string | null }) {
@@ -59,7 +60,7 @@ function AnalysisBadge({ status }: { status: string | null }) {
 
 const HOURS_48 = 48 * 60 * 60 * 1000;
 
-export default function TenderRow({ tender, projectId, isFavorited, onToggleFavorite }: Props) {
+export default function TenderRow({ tender, projectId, isFavorited, onToggleFavorite, onDismiss }: Props) {
   const router = useRouter();
   const deadline = daysUntil(tender.deadline_at);
   const isNew = tender.created_at
@@ -138,6 +139,20 @@ export default function TenderRow({ tender, projectId, isFavorited, onToggleFavo
         aria-label={isFavorited ? "Quitar de favoritos" : "Añadir a favoritos"}
       >
         <Star className={cn("h-4 w-4", isFavorited && "fill-amber-400")} />
+      </button>
+
+      {/* Dismiss button — removes tender from inbox */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDismiss(tender.id);
+        }}
+        className="shrink-0 p-1 rounded transition-colors text-muted-foreground/40 hover:text-destructive"
+        aria-label="Descartar licitación"
+        title="Descartar de la bandeja"
+      >
+        <X className="h-4 w-4" />
       </button>
     </div>
   );

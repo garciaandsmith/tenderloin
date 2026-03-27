@@ -20,13 +20,14 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
   const supabase = await createClient();
   const now = new Date().toISOString();
 
-  // Step 1 — Get passed tender IDs + inbox_seen_at.
+  // Step 1 — Get passed, non-dismissed tender IDs + inbox_seen_at.
   // Fetch most recent 1000 by tender_id: active (future-deadline) tenders always have high IDs.
   const { data: filterRows, error: filterError } = await supabase
     .from("tender_filter_results")
-    .select("tender_id, inbox_seen_at")
+    .select("tender_id, inbox_seen_at, dismissed_at")
     .eq("project_id", projectId)
     .eq("passed", true)
+    .is("dismissed_at", null)
     .order("tender_id", { ascending: false })
     .limit(1000);
 
@@ -96,6 +97,7 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
     human_score_avg: null,
     analysis_status: analysisMap.get(row.id) ?? null,
     inbox_seen_at: seenAtMap.get(row.id) ?? null,
+    dismissed_at: null,
   } as InboxTender));
 
   // Sort by model_score DESC (nulls last), then published_at DESC as tiebreaker.

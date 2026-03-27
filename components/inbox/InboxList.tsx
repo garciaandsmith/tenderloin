@@ -31,6 +31,7 @@ export default function InboxList({ tenders, projectId }: Props) {
   const [minScore, setMinScore] = useState(0);
   const [maxScore, setMaxScore] = useState(5);
   const [favorites, setFavorites] = useState<Set<number>>(new Set());
+  const [dismissed, setDismissed] = useState<Set<number>>(new Set());
 
   // Load favorites from localStorage on mount
   useEffect(() => {
@@ -64,6 +65,18 @@ export default function InboxList({ tenders, projectId }: Props) {
     [projectId]
   );
 
+  const handleDismiss = useCallback(
+    (id: number) => {
+      setDismissed((prev) => new Set([...prev, id]));
+      fetch(`/api/tenders/${id}/dismiss?projectId=${projectId}`, { method: "DELETE" }).catch(
+        () => {
+          // Silently fail — the optimistic update stays; a page refresh will restore the tender.
+        }
+      );
+    },
+    [projectId]
+  );
+
   if (tenders.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
@@ -86,6 +99,7 @@ export default function InboxList({ tenders, projectId }: Props) {
   const filtered: InboxTender[] = [];
 
   for (const t of tenders) {
+    if (dismissed.has(t.id)) continue;
     if (t.model_score !== null) scoredCount++;
     if (favorites.has(t.id)) starredCount++;
     if (t.analysis_status === "done") processedCount++;
@@ -204,7 +218,7 @@ export default function InboxList({ tenders, projectId }: Props) {
         <span className="w-24 shrink-0 text-right">Presupuesto</span>
         <span className="w-20 shrink-0 text-right">Plazo</span>
         <span className="w-20 shrink-0 text-right">Añadido</span>
-        <span className="w-6 shrink-0" />
+        <span className="w-12 shrink-0" />
       </div>
 
       {/* Rows */}
@@ -217,6 +231,7 @@ export default function InboxList({ tenders, projectId }: Props) {
               projectId={projectId}
               isFavorited={favorites.has(tender.id)}
               onToggleFavorite={toggleFavorite}
+              onDismiss={handleDismiss}
             />
           ))}
         </div>

@@ -26,6 +26,14 @@ def save_model(artifact: dict, client, project_id: str) -> None:
     """
     data = pickle.dumps(artifact, protocol=pickle.HIGHEST_PROTOCOL)
     path = f"scoring_{project_id}.pkl"
+
+    # Auto-create the bucket on first run; silently ignore if it already exists.
+    try:
+        client.storage.create_bucket(_BUCKET, options={"public": False})
+        logger.info("Created storage bucket '%s'", _BUCKET)
+    except Exception:
+        pass  # Bucket already exists — expected on every run after the first
+
     client.storage.from_(_BUCKET).upload(
         path,
         data,

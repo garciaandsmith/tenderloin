@@ -7,6 +7,8 @@ import { formatBudget } from "@/lib/utils/formatters";
 import { cpvLabel } from "@/lib/utils/cpv";
 import type { TrainingTender } from "@/lib/types/app.types";
 
+type RetrainStatus = "idle" | "loading" | "done" | "error";
+
 const FETCH_MORE_THRESHOLD = 3;
 const BATCH_SIZE = 10;
 const SLOTS = 5;
@@ -55,6 +57,8 @@ export default function TrainingCard({
   const [scoredCount, setScoredCount] = useState(initialCount);
   const [hasMore, setHasMore] = useState(initialTenders.length >= BATCH_SIZE);
   const [isFetching, setIsFetching] = useState(false);
+  const [pendingRetrainCount, setPendingRetrainCount] = useState(0);
+  const [retrainStatus, setRetrainStatus] = useState<RetrainStatus>("idle");
 
   const seenIds = useRef<Set<number>>(new Set(initialTenders.map((t) => t.id)));
   const fetchingRef = useRef(false);
@@ -130,6 +134,29 @@ export default function TrainingCard({
     }
   }, [queue.length, hasMore, isFetching, fetchMore]);
 
+  // Warn the user before leaving if they have scores that haven't triggered a retrain yet
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (pendingRetrainCount > 0) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [pendingRetrainCount]);
+
+  async function handleRetrain() {
+    setRetrainStatus("loading");
+    try {
+      const res = await fetch(`/api/projects/${projectId}/retrain`, { method: "POST" });
+      if (!res.ok) throw new Error("dispatch failed");
+      setPendingRetrainCount(0);
+      setRetrainStatus("done");
+    } catch {
+      setRetrainStatus("error");
+    }
+  }
+
   async function handleScore(slotIndex: number, tenderId: number, score: number) {
     const slot = slots[slotIndex];
     if (slot.status !== "filled") return;
@@ -148,8 +175,10 @@ export default function TrainingCard({
       body: JSON.stringify({ project_id: projectId, score }),
     });
 
-    // 3. Increment the scored counter
+    // 3. Increment the scored counter and mark as pending retrain
     setScoredCount((c) => c + 1);
+    setPendingRetrainCount((c) => c + 1);
+    setRetrainStatus("idle");
 
     // 4. Transition slot: fill from queue, or go to loading/empty
     const next = queueRef.current[0];
@@ -180,6 +209,27 @@ export default function TrainingCard({
   return (
     <div className="space-y-4">
       <TrainingCounter count={scoredCount} />
+
+      {pendingRetrainCount > 0 && (
+        <div className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+          <p className="text-sm text-blue-800">
+            {retrainStatus === "done"
+              ? "Reentrenamiento iniciado. El modelo se actualizará en breve."
+              : retrainStatus === "error"
+              ? "Error al iniciar el reentrenamiento. Inténtalo de nuevo."
+              : `${pendingRetrainCount} puntuación${pendingRetrainCount !== 1 ? "es" : ""} pendiente${pendingRetrainCount !== 1 ? "s" : ""} de reentrenamiento.`}
+          </p>
+          {retrainStatus !== "done" && (
+            <button
+              onClick={handleRetrain}
+              disabled={retrainStatus === "loading"}
+              className="ml-4 shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              {retrainStatus === "loading" ? "Iniciando…" : "Guardar y reentrenar"}
+            </button>
+          )}
+        </div>
+      )}
 
       {isExhausted ? (
         <div className="rounded-lg border bg-card p-8 text-center">

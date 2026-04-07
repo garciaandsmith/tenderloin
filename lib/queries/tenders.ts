@@ -64,11 +64,19 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
   if (msError) throw msError;
 
   // Keep highest model_version per tender.
+  // "neutral" is the fallback version used when no model artifact exists and scores default to 3.0;
+  // it must always lose to any real (date-based) version string like "20260407".
+  function compareVersions(a: string, b: string): number {
+    if (a === "neutral" && b !== "neutral") return -1;
+    if (b === "neutral" && a !== "neutral") return 1;
+    return a.localeCompare(b);
+  }
+
   const modelScoreMap = new Map<number, { model_score: number; model_version: string }>();
   for (const ms of msRows ?? []) {
     const tid = ms.tender_id as number;
     const existing = modelScoreMap.get(tid);
-    if (!existing || ms.model_version.localeCompare(existing.model_version) > 0) {
+    if (!existing || compareVersions(ms.model_version, existing.model_version) > 0) {
       modelScoreMap.set(tid, { model_score: ms.model_score, model_version: ms.model_version });
     }
   }

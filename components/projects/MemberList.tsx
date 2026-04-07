@@ -25,26 +25,26 @@ interface Props {
 
 export default function MemberList({ projectId, members, readOnly = false }: Props) {
   const router = useRouter();
-  const [newUserId, setNewUserId] = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function addMember() {
-    if (!newUserId.trim()) return;
+    if (!newEmail.trim()) return;
     setLoading(true);
     setError(null);
 
     const res = await fetch(`/api/projects/${projectId}/members`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: newUserId.trim() }),
+      body: JSON.stringify({ email: newEmail.trim() }),
     });
 
     if (!res.ok) {
       const data = await res.json();
       setError(data.error ?? "Error al añadir el miembro.");
     } else {
-      setNewUserId("");
+      setNewEmail("");
       router.refresh();
     }
     setLoading(false);
@@ -109,10 +109,11 @@ export default function MemberList({ projectId, members, readOnly = false }: Pro
         <>
           <div className="flex gap-2">
             <Input
-              placeholder="UUID del usuario a añadir"
-              value={newUserId}
-              onChange={(e) => setNewUserId(e.target.value)}
-              className="max-w-xs font-mono text-xs"
+              type="email"
+              placeholder="email@usuario.com"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              className="max-w-xs"
             />
             <Button onClick={addMember} disabled={loading} size="sm">
               Añadir
@@ -120,7 +121,7 @@ export default function MemberList({ projectId, members, readOnly = false }: Pro
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <p className="text-xs text-muted-foreground">
-            Obtén el UUID de usuario desde el panel de Supabase → Authentication → Users.
+            El usuario debe tener una cuenta registrada en la plataforma.
           </p>
         </>
       )}

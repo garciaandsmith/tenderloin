@@ -35,12 +35,32 @@ export async function POST(request: Request, { params }: Params) {
   if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
-  const { user_id } = body as { user_id: string };
-  if (!user_id) return NextResponse.json({ error: "user_id is required" }, { status: 400 });
+  const { user_id, email } = body as { user_id?: string; email?: string };
+
+  let resolvedUserId = user_id;
+
+  if (!resolvedUserId && email) {
+    const { data: found } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", email.toLowerCase().trim())
+      .single();
+    if (!found) {
+      return NextResponse.json(
+        { error: "No se encontró ningún usuario con ese email." },
+        { status: 404 }
+      );
+    }
+    resolvedUserId = found.id;
+  }
+
+  if (!resolvedUserId) {
+    return NextResponse.json({ error: "Se requiere user_id o email" }, { status: 400 });
+  }
 
   const { error } = await supabase
     .from("project_members")
-    .insert({ project_id: projectId, user_id });
+    .insert({ project_id: projectId, user_id: resolvedUserId });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return new NextResponse(null, { status: 201 });

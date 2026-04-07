@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { formatDate } from "@/lib/utils/formatters";
 import UserRoleToggle from "@/components/admin/UserRoleToggle";
+import InviteUserForm from "@/components/admin/InviteUserForm";
 
 export const metadata = { title: "Usuarios — Admin — Tenderloin" };
 
@@ -29,7 +30,10 @@ export default async function AdminUsersPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Gestión de usuarios</h1>
+      <div className="flex items-start justify-between mb-6">
+        <h1 className="text-2xl font-bold">Gestión de usuarios</h1>
+        <InviteUserForm />
+      </div>
 
       <div className="rounded-lg border overflow-hidden">
         <table className="w-full text-sm">
@@ -70,9 +74,6 @@ export default async function AdminUsersPage() {
         </table>
       </div>
 
-      <p className="text-xs text-muted-foreground mt-4">
-        Para invitar nuevos usuarios, accede al panel de Supabase → Authentication.
-      </p>
     </div>
   );
 }

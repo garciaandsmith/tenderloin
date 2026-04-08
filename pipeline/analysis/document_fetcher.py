@@ -1,17 +1,22 @@
 """Download and extract text from PLACSP tender pliego documents.
 
 Two-step fetch:
-  1. Parse the tender's main page to find the 'Pliego' HTML view link in the
-     'Anuncios y Documentos' table.
-  2. Fetch that Pliego HTML page and locate all PDF links for:
-       - Technical documents (PPT): links containing "tecnic*"
-       - Administrative documents (PCAP): links containing "administ*"
-  3. Download and extract full text from each matched document.
+  1. Parse the tender's main page HTML to find the XML link for the 'Pliego'
+     row in the 'Anuncios y Documentos' table.
+  2. Parse that XML (CODICE / UBL format published by PLACSP) and follow either
+       - TechnicalDocumentReference  → for 'technical' analysis
+       - LegalDocumentReference      → for 'administrative' analysis
+     to locate the actual document URLs, then download and extract their text.
+
+This replaces the old keyword-matching approach (_PliegoDocParser) with the
+authoritative XML-based approach, and makes each analysis type fetch only its
+own document — no cross-contamination.
 """
 from __future__ import annotations
 
 import io
 import logging
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
@@ -26,71 +31,60 @@ _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 
 @dataclass
 class PliegoTexts:
-    """Extracted texts from the two key pliego documents."""
-    ppt_text: str = ""    # Pliego de Prescripciones Técnicas (concatenated)
-    pcap_text: str = ""   # Pliego de Cláusulas Administrativas (concatenated)
+    """Extracted texts from the relevant pliego document for an analysis type."""
+    ppt_text: str = ""    # Pliego de Prescripciones Técnicas  (populated for 'technical')
+    pcap_text: str = ""   # Pliego de Cláusulas Administrativas (populated for 'administrative')
     attached_files: list[dict] = field(default_factory=list)
 
 
-# ─── HTML parsers ──────────────────────────────────────────────────────────────
+# ─── HTML parser: find the XML link in "Anuncios y Documentos" ────────────────
 
 class _AnunciosTableParser(HTMLParser):
-    """Finds the HTML view link for the 'Pliego' row in 'Anuncios y Documentos'.
+    """Finds the XML view link for the 'Pliego' row in 'Anuncios y Documentos'.
 
     The PLACSP tender page contains a section headed "Anuncios y Documentos"
     with a table of publication rows. Each row has a document name cell and a
     set of format-icon links (HTML, XML, PDF, download). This parser locates
-    any row whose document name contains "pliego" (e.g. "Pliego",
-    "Rectificación de Pliego") and returns the href of the first link in its
-    icons cell (the HTML format icon).
+    any row whose document name contains "pliego" and returns the href of the
+    link whose URL contains "xml" — the CODICE/UBL XML publication.
     """
 
     def __init__(self, base_url: str) -> None:
         super().__init__()
         self.base_url = base_url
-        self.pliego_html_url: str | None = None
+        self.pliego_xml_url: str | None = None
 
-        # State flags
         self._in_anuncios_section = False
         self._in_row = False
         self._in_doc_name_cell = False
         self._current_row_has_pliego = False
-        self._current_row_link_count = 0
         self._current_cell_text = ""
-        self._cell_index = 0  # index of <td> within the current <tr>
+        self._pending_heading = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple]) -> None:
         attr = dict(attrs)
 
-        # Detect the "Anuncios y Documentos" section by heading text;
-        # we set the flag in handle_data instead.
         if tag in ("h2", "h3", "h4"):
             self._pending_heading = True
 
         if tag == "tr":
             self._in_row = True
             self._current_row_has_pliego = False
-            self._current_row_link_count = 0
-            self._cell_index = 0
 
         if tag == "td" and self._in_anuncios_section and self._in_row:
-            self._cell_index += 1
             self._in_doc_name_cell = True
             self._current_cell_text = ""
 
         if tag == "a" and self._in_anuncios_section and self._in_row:
-            href = attr.get("href")
-            if href and self._current_row_has_pliego and self.pliego_html_url is None:
-                # The first link in a Pliego row is the HTML format icon
-                self._current_row_link_count += 1
-                if self._current_row_link_count == 1:
-                    self.pliego_html_url = urljoin(self.base_url, href)
+            href = attr.get("href", "")
+            if href and self._current_row_has_pliego and self.pliego_xml_url is None:
+                if "xml" in href.lower():
+                    self.pliego_xml_url = urljoin(self.base_url, href)
 
     def handle_data(self, data: str) -> None:
         text = data.strip()
 
-        # Detect section headings
-        if hasattr(self, "_pending_heading") and self._pending_heading:
+        if self._pending_heading:
             if "anuncios" in text.lower() and "documentos" in text.lower():
                 self._in_anuncios_section = True
             self._pending_heading = False
@@ -103,72 +97,58 @@ class _AnunciosTableParser(HTMLParser):
             self._pending_heading = False
 
         if tag == "td" and self._in_doc_name_cell:
-            cell_text = self._current_cell_text.strip().lower()
-            if "pliego" in cell_text:
+            if "pliego" in self._current_cell_text.strip().lower():
                 self._current_row_has_pliego = True
             self._in_doc_name_cell = False
 
         if tag == "tr":
             self._in_row = False
             self._current_row_has_pliego = False
-            self._current_row_link_count = 0
-            self._cell_index = 0
 
 
-class _PliegoDocParser(HTMLParser):
-    """Finds PPT and PCAP document links on the Pliego HTML page.
+# ─── XML parser: extract document URLs by analysis type ───────────────────────
 
-    Looks for <a href="..."> tags whose visible text or title attribute
-    contains keywords identifying each document type. Collects ALL matching
-    links per type (there may be multiple annexes or parts).
-    Accepts any link format (PDF, DOCX, HTML viewer) — content-type detection
-    happens at download time.
+def _parse_xml_doc_urls(xml_text: str, analysis_type: str) -> list[str]:
+    """Parse a CODICE/UBL XML and return document URLs for the given analysis type.
+
+    For 'technical'      → follows TechnicalDocumentReference elements
+    For 'administrative' → follows LegalDocumentReference elements
+
+    Uses namespace-agnostic wildcard selectors so that differences in the XML
+    namespace declaration do not cause misses.
     """
+    tag_name = (
+        "TechnicalDocumentReference"
+        if analysis_type == "technical"
+        else "LegalDocumentReference"
+    )
 
-    _PPT_KEYWORDS = ("tecnic",)       # matches técnico, técnica, técnicas, tecnicas, …
-    _PCAP_KEYWORDS = ("administ",)    # matches administrativo, administrativa, administración, …
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        logger.warning("XML parse error: %s", exc)
+        return []
 
-    def __init__(self, base_url: str) -> None:
-        super().__init__()
-        self.base_url = base_url
-        self.ppt_urls: list[str] = []
-        self.pcap_urls: list[str] = []
+    urls: list[str] = []
+    for ref_el in root.iter():
+        # Namespace-agnostic: the local tag name is after the closing '}'
+        local = ref_el.tag.split("}")[-1] if "}" in ref_el.tag else ref_el.tag
+        if local != tag_name:
+            continue
+        # Look for a URI child anywhere inside this reference element
+        for child in ref_el.iter():
+            child_local = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+            if child_local == "URI" and child.text:
+                url = child.text.strip()
+                if url and url not in urls:
+                    urls.append(url)
+                break  # one URI per reference
 
-        self._current_href: str | None = None
-        self._current_title: str | None = None
-        self._current_link_text = ""
-
-    def handle_starttag(self, tag: str, attrs: list[tuple]) -> None:
-        if tag != "a":
-            return
-        attr = dict(attrs)
-        href = attr.get("href", "")
-        if not href:
-            return
-        self._current_href = urljoin(self.base_url, href)
-        self._current_title = (attr.get("title") or attr.get("data-title") or "").lower()
-        self._current_link_text = ""
-
-    def handle_data(self, data: str) -> None:
-        if self._current_href is not None:
-            self._current_link_text += data
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag != "a" or self._current_href is None:
-            return
-
-        combined = (self._current_link_text + " " + (self._current_title or "")).lower()
-
-        if any(kw in combined for kw in self._PPT_KEYWORDS):
-            if self._current_href not in self.ppt_urls:
-                self.ppt_urls.append(self._current_href)
-        elif any(kw in combined for kw in self._PCAP_KEYWORDS):
-            if self._current_href not in self.pcap_urls:
-                self.pcap_urls.append(self._current_href)
-
-        self._current_href = None
-        self._current_title = None
-        self._current_link_text = ""
+    if urls:
+        logger.info("Found %d %s URL(s) in XML", len(urls), tag_name)
+    else:
+        logger.warning("No %s elements found in XML", tag_name)
+    return urls
 
 
 # ─── low-level helpers ─────────────────────────────────────────────────────────
@@ -227,8 +207,8 @@ def _extract_docx_text(content: bytes) -> str:
         return ""
 
 
-def _download_pdf_text(url: str) -> str:
-    """Download a URL and extract its full text (PDF or DOCX)."""
+def _download_doc_text(url: str) -> str:
+    """Download a URL and extract its full text (PDF, DOCX, or plain text)."""
     try:
         content = _fetch_bytes(url)
     except Exception as exc:
@@ -239,17 +219,16 @@ def _download_pdf_text(url: str) -> str:
     ext = _get_extension(url)
     if ext in (".doc", ".docx"):
         return _extract_docx_text(content)
-    # Treat as plain text
     return content.decode("utf-8", errors="replace")
 
 
 # ─── main class ───────────────────────────────────────────────────────────────
 
 class DocumentFetcher:
-    """Fetches PPT and PCAP document texts from PLACSP tender pages."""
+    """Fetches pliego document texts from PLACSP tender pages via XML."""
 
-    def fetch_pliego_url(self, tender_url: str) -> str | None:
-        """Return the HTML view URL for the 'Pliego' row on the tender page."""
+    def fetch_pliego_xml_url(self, tender_url: str) -> str | None:
+        """Return the XML publication URL for the 'Pliego' row on the tender page."""
         try:
             html = _fetch_url(tender_url)
         except (URLError, HTTPError, Exception) as exc:
@@ -259,74 +238,63 @@ class DocumentFetcher:
         parser = _AnunciosTableParser(tender_url)
         parser.feed(html)
 
-        if parser.pliego_html_url:
-            logger.info("Found Pliego HTML URL: %s", parser.pliego_html_url)
+        if parser.pliego_xml_url:
+            logger.info("Found Pliego XML URL: %s", parser.pliego_xml_url)
         else:
-            logger.warning("No Pliego HTML link found on %s", tender_url)
-        return parser.pliego_html_url
+            logger.warning("No Pliego XML link found on %s", tender_url)
+        return parser.pliego_xml_url
 
-    def fetch_pliego_pdf_urls(self, pliego_url: str) -> dict[str, list[str]]:
-        """Return {'ppt': [urls], 'pcap': [urls]} from the Pliego HTML page."""
-        try:
-            html = _fetch_url(pliego_url)
-        except (URLError, HTTPError, Exception) as exc:
-            logger.warning("Could not fetch Pliego page %s: %s", pliego_url, exc)
-            return {"ppt": [], "pcap": []}
+    def fetch_texts(self, tender_url: str, analysis_type: str) -> PliegoTexts:
+        """Fetch the pliego document text for the given analysis type.
 
-        parser = _PliegoDocParser(pliego_url)
-        parser.feed(html)
+        Downloads only the document type relevant to *analysis_type*:
+          - 'technical'      → TechnicalDocumentReference → ppt_text
+          - 'administrative' → LegalDocumentReference     → pcap_text
 
-        logger.info(
-            "Pliego PDFs — PPT: %d found | PCAP: %d found",
-            len(parser.ppt_urls), len(parser.pcap_urls),
-        )
-        return {"ppt": parser.ppt_urls, "pcap": parser.pcap_urls}
-
-    def fetch_texts(self, tender_url: str) -> PliegoTexts:
-        """Fetch PPT and PCAP texts from the tender's Pliego documents.
-
-        Downloads all matching documents per type and concatenates their text.
         Returns a PliegoTexts dataclass. Any step that fails is logged as a
         warning and results in an empty string for that document.
         """
         result = PliegoTexts()
 
-        pliego_url = self.fetch_pliego_url(tender_url)
-        if not pliego_url:
+        xml_url = self.fetch_pliego_xml_url(tender_url)
+        if not xml_url:
             return result
 
-        pdf_urls = self.fetch_pliego_pdf_urls(pliego_url)
+        try:
+            xml_text = _fetch_url(xml_url)
+        except Exception as exc:
+            logger.warning("Could not fetch Pliego XML %s: %s", xml_url, exc)
+            return result
 
-        ppt_parts: list[str] = []
-        for url in pdf_urls.get("ppt", []):
-            logger.info("Fetching PPT document: %s", url)
-            text = _download_pdf_text(url)
-            if text:
-                ppt_parts.append(text)
-            result.attached_files.append({
-                "name": "Pliego de Prescripciones Técnicas",
-                "url": url,
-                "type": "pdf",
-            })
-        if ppt_parts:
-            result.ppt_text = "\n\n---\n\n".join(ppt_parts)
-        else:
-            logger.warning("No PPT documents found on Pliego page %s", pliego_url)
+        doc_urls = _parse_xml_doc_urls(xml_text, analysis_type)
+        if not doc_urls:
+            return result
 
-        pcap_parts: list[str] = []
-        for url in pdf_urls.get("pcap", []):
-            logger.info("Fetching PCAP document: %s", url)
-            text = _download_pdf_text(url)
+        is_technical = analysis_type == "technical"
+        doc_name = (
+            "Pliego de Prescripciones Técnicas"
+            if is_technical
+            else "Pliego de Cláusulas Administrativas"
+        )
+
+        parts: list[str] = []
+        for url in doc_urls:
+            logger.info("Fetching %s document: %s", analysis_type, url)
+            text = _download_doc_text(url)
             if text:
-                pcap_parts.append(text)
-            result.attached_files.append({
-                "name": "Pliego de Cláusulas Administrativas",
-                "url": url,
-                "type": "pdf",
-            })
-        if pcap_parts:
-            result.pcap_text = "\n\n---\n\n".join(pcap_parts)
+                parts.append(text)
+            result.attached_files.append({"name": doc_name, "url": url, "type": "pdf"})
+
+        combined = "\n\n---\n\n".join(parts) if parts else ""
+        if combined:
+            if is_technical:
+                result.ppt_text = combined
+            else:
+                result.pcap_text = combined
         else:
-            logger.warning("No PCAP documents found on Pliego page %s", pliego_url)
+            logger.warning(
+                "No text extracted from %s documents for tender %s",
+                analysis_type, tender_url,
+            )
 
         return result

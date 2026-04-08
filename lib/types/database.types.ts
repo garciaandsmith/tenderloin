@@ -55,6 +55,8 @@ export interface Database {
           updated_at: string;
           is_active: boolean;
           training_session: number;
+          prompt_technical: string | null;
+          prompt_administrative: string | null;
         };
         Insert: {
           id?: string;
@@ -65,6 +67,8 @@ export interface Database {
           updated_at?: string;
           is_active?: boolean;
           training_session?: number;
+          prompt_technical?: string | null;
+          prompt_administrative?: string | null;
         };
         Update: {
           name?: string;
@@ -72,6 +76,8 @@ export interface Database {
           is_active?: boolean;
           updated_at?: string;
           training_session?: number;
+          prompt_technical?: string | null;
+          prompt_administrative?: string | null;
         };
         Relationships: [];
       };
@@ -298,12 +304,11 @@ export interface Database {
         Row: {
           id: number;
           tender_id: number;
+          analysis_type: "technical" | "administrative";
           project_id: string | null;
           triggered_by: string | null;
           status: "pending" | "running" | "done" | "error";
-          key_data_summary: string | null;
           services_required: string | null;
-          technical_conditions: string | null;
           administrative_conditions: string | null;
           attached_files: Json | null;
           raw_llm_output: Json | null;
@@ -313,12 +318,11 @@ export interface Database {
         Insert: {
           id?: number;
           tender_id: number;
+          analysis_type: "technical" | "administrative";
           project_id?: string | null;
           triggered_by?: string | null;
           status?: "pending" | "running" | "done" | "error";
-          key_data_summary?: string | null;
           services_required?: string | null;
-          technical_conditions?: string | null;
           administrative_conditions?: string | null;
           attached_files?: Json | null;
           raw_llm_output?: Json | null;
@@ -327,9 +331,7 @@ export interface Database {
         };
         Update: {
           status?: "pending" | "running" | "done" | "error";
-          key_data_summary?: string | null;
           services_required?: string | null;
-          technical_conditions?: string | null;
           administrative_conditions?: string | null;
           attached_files?: Json | null;
           raw_llm_output?: Json | null;

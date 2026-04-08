@@ -3,6 +3,7 @@ import { getProject, getProjectMembers } from "@/lib/queries/projects";
 import { notFound } from "next/navigation";
 import ProjectEditForm from "@/components/projects/ProjectEditForm";
 import MemberList from "@/components/projects/MemberList";
+import AnalysisPromptsForm from "@/components/projects/AnalysisPromptsForm";
 
 export const metadata = { title: "Configuración — Tenderloin" };
 
@@ -52,6 +53,20 @@ export default async function ProjectConfigurationPage({ params }: Props) {
           projectId={projectId}
           members={members as Parameters<typeof MemberList>[0]["members"]}
           readOnly={!isAdmin}
+        />
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold mb-2">Prompts de análisis</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Configura las instrucciones que Claude usará para analizar los pliegos técnico y
+          administrativo. Si un prompt está vacío, el análisis correspondiente no podrá
+          ejecutarse.
+        </p>
+        <AnalysisPromptsForm
+          projectId={project.id}
+          initialTechnicalPrompt={project.prompt_technical ?? null}
+          initialAdministrativePrompt={project.prompt_administrative ?? null}
         />
       </section>
     </div>

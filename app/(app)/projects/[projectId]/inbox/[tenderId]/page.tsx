@@ -84,10 +84,8 @@ export default async function TenderDetailPage({ params }: Props) {
   const adminAnalysis: AnalysisRow =
     analysisRows?.find((r) => r.analysis_type === "administrative") ?? null;
 
-  const canProcessTechnical =
-    !technicalAnalysis || technicalAnalysis.status === "error";
-  const canProcessAdmin =
-    !adminAnalysis || adminAnalysis.status === "error";
+  const canProcessTechnical = true;
+  const canProcessAdmin = true;
 
   const hasPendingAnalysis =
     technicalAnalysis?.status === "pending" || technicalAnalysis?.status === "running" ||
@@ -183,6 +181,7 @@ export default async function TenderDetailPage({ params }: Props) {
             description="Servicios requeridos, actuaciones y requisitos del equipo (Pliego de Prescripciones Técnicas)."
             analysis={technicalAnalysis}
             canProcess={canProcessTechnical}
+            analysisStatus={technicalAnalysis?.status ?? null}
             tenderId={tender.id}
             projectId={projectId}
             userId={user!.id}
@@ -199,14 +198,6 @@ export default async function TenderDetailPage({ params }: Props) {
                     />
                   </div>
                 )}
-                {technicalAnalysis.key_data_summary && (
-                  <div className="rounded-lg border p-4">
-                    <h3 className="font-semibold text-sm mb-2">Datos clave y plazos</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-                      {technicalAnalysis.key_data_summary}
-                    </p>
-                  </div>
-                )}
                 <AttachedFiles files={technicalAnalysis.attached_files} />
               </div>
             )}
@@ -214,10 +205,11 @@ export default async function TenderDetailPage({ params }: Props) {
 
           {/* Administrative analysis */}
           <AnalysisPanel
-            title="An\u00e1lisis administrativo"
+            title="Análisis administrativo"
             description="Condiciones legales y administrativas, solvencia, garantías y obligaciones (Pliego de Cláusulas Administrativas)."
             analysis={adminAnalysis}
             canProcess={canProcessAdmin}
+            analysisStatus={adminAnalysis?.status ?? null}
             tenderId={tender.id}
             projectId={projectId}
             userId={user!.id}
@@ -232,14 +224,6 @@ export default async function TenderDetailPage({ params }: Props) {
                       title="Entregables, obligaciones y criterios de valoración"
                       content={adminAnalysis.administrative_conditions}
                     />
-                  </div>
-                )}
-                {adminAnalysis.key_data_summary && (
-                  <div className="rounded-lg border p-4">
-                    <h3 className="font-semibold text-sm mb-2">Datos clave y plazos</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-                      {adminAnalysis.key_data_summary}
-                    </p>
                   </div>
                 )}
                 <AttachedFiles files={adminAnalysis.attached_files} />
@@ -258,6 +242,7 @@ function AnalysisPanel({
   description,
   analysis,
   canProcess,
+  analysisStatus,
   tenderId,
   projectId,
   userId,
@@ -268,6 +253,7 @@ function AnalysisPanel({
   description: string;
   analysis: AnalysisRow;
   canProcess: boolean;
+  analysisStatus: string | null;
   tenderId: number;
   projectId: string;
   userId: string;
@@ -284,6 +270,7 @@ function AnalysisPanel({
             projectId={projectId}
             userId={userId}
             analysisType={analysisType}
+            analysisStatus={analysisStatus}
             retrying={analysis?.status === "error"}
           />
         )}

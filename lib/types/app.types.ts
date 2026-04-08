@@ -15,7 +15,10 @@ export type PipelineState = Database["public"]["Tables"]["pipeline_state"]["Row"
 export interface InboxTender extends TenderRaw {
   model_score: number | null;
   human_score_avg: number | null;
-  analysis_status: string | null; // 'pending' | 'running' | 'done' | 'error' | null
+  /** Status of the technical analysis row, or null if no row exists yet. */
+  analysis_technical_status: string | null;
+  /** Status of the administrative analysis row, or null if no row exists yet. */
+  analysis_administrative_status: string | null;
   inbox_seen_at: string | null;   // set when user first opens the tender from the inbox
   dismissed_at: string | null;    // set when user dismisses the tender from the inbox
 }

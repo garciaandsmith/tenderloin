@@ -57,6 +57,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Licitación no encontrada" }, { status: 404 });
   }
 
+  // Guard: verify the project has a configured prompt for this analysis type
+  const { data: project } = await supabase
+    .from("projects")
+    .select("prompt_technical, prompt_administrative")
+    .eq("id", projectId)
+    .single();
+
+  const prompt =
+    analysisType === "technical"
+      ? project?.prompt_technical
+      : project?.prompt_administrative;
+
+  if (!prompt) {
+    return NextResponse.json(
+      {
+        error:
+          "El prompt de análisis no está configurado para este proyecto. " +
+          "Configúralo en la página de Configuración del proyecto antes de lanzar el análisis.",
+      },
+      { status: 422 }
+    );
+  }
+
   // Upsert a pending analysis record for this type (reset if previously errored)
   const { error } = await supabase
     .from("tender_analysis")
@@ -67,9 +90,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         project_id: projectId,
         triggered_by: user.id,
         status: "pending",
-        key_data_summary: null,
         services_required: null,
-        technical_conditions: null,
         administrative_conditions: null,
         attached_files: null,
         raw_llm_output: null,

@@ -94,7 +94,6 @@ Respond ONLY with the JSON, no text before or after.
 @dataclass
 class AnalysisResult:
     services_required: Optional[str]
-    technical_conditions: Optional[str]
     administrative_conditions: Optional[str]
     key_data_summary: Optional[str]
     raw_llm_output: dict
@@ -153,7 +152,6 @@ class LLMAnalyzer:
 
         return AnalysisResult(
             services_required=parsed.get("services_required") or None,
-            technical_conditions=parsed.get("technical_conditions") or None,
             administrative_conditions=parsed.get("administrative_conditions") or None,
             key_data_summary=None,  # now embedded within the main analysis sections
             raw_llm_output=raw_output,

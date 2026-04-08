@@ -150,7 +150,6 @@ def _process_one(
     client.table("tender_analysis").update({
         "status": "done",
         "services_required": result.services_required,
-        "technical_conditions": result.technical_conditions,
         "administrative_conditions": result.administrative_conditions,
         "key_data_summary": result.key_data_summary,
         "attached_files": attached_files or None,

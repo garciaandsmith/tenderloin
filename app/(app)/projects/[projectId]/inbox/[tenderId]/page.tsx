@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { formatBudget, formatDate, daysUntil } from "@/lib/utils/formatters";
 import { cpvLabel } from "@/lib/utils/cpv";
 import { nutsLabel } from "@/lib/utils/nuts";
@@ -356,7 +358,9 @@ function AnalysisSection({
   return (
     <div>
       <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">{title}</h4>
-      <p className="text-sm leading-relaxed whitespace-pre-line">{content}</p>
+      <div className="prose prose-sm dark:prose-invert max-w-none">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      </div>
     </div>
   );
 }

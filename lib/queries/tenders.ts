@@ -82,28 +82,31 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
   }
 
   // Step 4 — Fetch analysis status for this project (indexed on project_id, tender_id).
+  // Select analysis_type so we can track technical and administrative separately.
   const { data: analysisRows, error: aError } = await supabase
     .from("tender_analysis")
-    .select("tender_id, status")
+    .select("tender_id, status, analysis_type")
     .eq("project_id", projectId)
     .in("tender_id", finalIds);
 
   if (aError) throw aError;
 
-  // First status found per tender (equivalent to existing find() behavior).
-  const analysisMap = new Map<number, string>();
+  // Build a map: tender_id → { technical: status | null, administrative: status | null }
+  const analysisMap = new Map<number, { technical: string | null; administrative: string | null }>();
   for (const a of analysisRows ?? []) {
     const tid = a.tender_id as number;
-    if (!analysisMap.has(tid)) {
-      analysisMap.set(tid, a.status);
-    }
+    const entry = analysisMap.get(tid) ?? { technical: null, administrative: null };
+    if (a.analysis_type === "technical") entry.technical = a.status;
+    else if (a.analysis_type === "administrative") entry.administrative = a.status;
+    analysisMap.set(tid, entry);
   }
 
   const mapped = tenderRows.map((row) => ({
     ...row,
     model_score: modelScoreMap.get(row.id)?.model_score ?? null,
     human_score_avg: null,
-    analysis_status: analysisMap.get(row.id) ?? null,
+    analysis_technical_status: analysisMap.get(row.id)?.technical ?? null,
+    analysis_administrative_status: analysisMap.get(row.id)?.administrative ?? null,
     inbox_seen_at: seenAtMap.get(row.id) ?? null,
     dismissed_at: null,
   } as InboxTender));

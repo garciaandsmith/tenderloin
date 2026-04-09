@@ -2,9 +2,14 @@
 
 For each pending record:
   1. Mark status as 'running'.
-  2. Fetch the tender's PLACSP page and download attached documents.
-  3. Call the LLM to extract structured summaries for the record's analysis_type.
-  4. Write results back to tender_analysis (status='done') or mark as 'error'.
+  2. Fetch the project's configured prompt for the analysis type; fail with a
+     clear error if no prompt has been set (NULL in projects table).
+  3. Fetch only the document type needed for this analysis:
+       - 'technical'      → TechnicalDocumentReference (PPT)
+       - 'administrative' → LegalDocumentReference (PCAP)
+  4. Call the LLM with the project-supplied system prompt.
+  5. Write results back to tender_analysis (status='done') — only the column
+     relevant to this analysis type — or mark as 'error'.
 """
 from __future__ import annotations
 
@@ -81,6 +86,7 @@ def process_pending_analyses(
                 analysis_id=analysis_id,
                 tender_id=tender_id,
                 analysis_type=record_type,
+                project_id=record["project_id"],
             )
         except Exception as exc:
             logger.error(
@@ -103,10 +109,31 @@ def _process_one(
     analysis_id: int,
     tender_id: int,
     analysis_type: str,
+    project_id: str,
 ) -> int:
     """Analyse a single tender record and update the DB. Returns 1 on success."""
     from pipeline.analysis.document_fetcher import DocumentFetcher
     from pipeline.analysis.llm_client import LLMAnalyzer
+
+    # Fetch project prompt — fail immediately if not configured
+    proj_resp = (
+        client.table("projects")
+        .select("prompt_technical, prompt_administrative")
+        .eq("id", project_id)
+        .single()
+        .execute()
+    )
+    proj = proj_resp.data or {}
+    prompt = (
+        proj.get("prompt_technical")
+        if analysis_type == "technical"
+        else proj.get("prompt_administrative")
+    )
+    if not prompt:
+        raise ValueError(
+            f"No prompt configured for analysis_type='{analysis_type}' "
+            f"on project {project_id}. Configure it in the project settings."
+        )
 
     # Fetch tender row
     tender_resp = (
@@ -120,22 +147,22 @@ def _process_one(
     if not tender:
         raise ValueError(f"Tender {tender_id} not found in tenders_raw")
 
-    # Fetch documents (best-effort; fall back to summary-only analysis)
+    # Fetch only the document type needed for this analysis (best-effort)
     pliego_texts = None
     attached_files: list[dict] = []
     try:
-        pliego_texts = fetcher.fetch_texts(tender["link"])
+        pliego_texts = fetcher.fetch_texts(tender["link"], analysis_type)
         attached_files = [
             {"name": d["name"], "url": d["url"], "type": d["type"]}
             for d in pliego_texts.attached_files
         ]
     except Exception as exc:
         logger.warning(
-            "Document fetching failed for tender %d (%s): %s — will analyse summary only.",
-            tender_id, tender.get("link"), exc,
+            "Document fetching failed for tender %d (%s, type=%s): %s — will analyse summary only.",
+            tender_id, tender.get("link"), analysis_type, exc,
         )
 
-    # Call the LLM with the appropriate analysis type (retries on transient errors)
+    # Call the LLM with the project-configured prompt
     result = _call_with_retry(
         analyzer,
         title=tender["title"],
@@ -144,18 +171,22 @@ def _process_one(
         analysis_type=analysis_type,
         ppt_text=pliego_texts.ppt_text if pliego_texts else "",
         pcap_text=pliego_texts.pcap_text if pliego_texts else "",
+        system_prompt=prompt,
     )
 
-    # Persist results
-    client.table("tender_analysis").update({
+    # Persist results — only write the column that belongs to this analysis type
+    update_data: dict = {
         "status": "done",
-        "services_required": result.services_required,
-        "administrative_conditions": result.administrative_conditions,
-        "key_data_summary": result.key_data_summary,
-        "attached_files": attached_files or None,
         "raw_llm_output": result.raw_llm_output,
+        "attached_files": attached_files or None,
         "completed_at": _now_iso(),
-    }).eq("id", analysis_id).execute()
+    }
+    if analysis_type == "technical":
+        update_data["services_required"] = result.services_required
+    else:
+        update_data["administrative_conditions"] = result.administrative_conditions
+
+    client.table("tender_analysis").update(update_data).eq("id", analysis_id).execute()
 
     logger.info(
         "Analysis %d (%s) completed for tender %d.",

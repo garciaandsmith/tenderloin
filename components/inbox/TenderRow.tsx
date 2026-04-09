@@ -15,35 +15,36 @@ interface Props {
   onDismiss: (id: number) => void;
 }
 
-function AnalysisBadge({ status }: { status: string | null }) {
+const ANALYSIS_STATUS_CONFIGS: Record<
+  string,
+  { className: string; Icon: React.ElementType }
+> = {
+  done:    { className: "bg-green-100 text-green-700 border-green-200", Icon: CheckCircle },
+  running: { className: "bg-blue-100 text-blue-700 border-blue-200",   Icon: Loader2 },
+  pending: { className: "bg-amber-100 text-amber-700 border-amber-200", Icon: Clock },
+  error:   { className: "bg-red-100 text-red-700 border-red-200",       Icon: AlertCircle },
+};
+
+const STATUS_SHORT_LABELS: Record<string, { technical: string; administrative: string }> = {
+  done:    { technical: "Téc. procesado",   administrative: "Adm. procesado" },
+  running: { technical: "Téc. procesando",  administrative: "Adm. procesando" },
+  pending: { technical: "Téc. en cola",     administrative: "Adm. en cola" },
+  error:   { technical: "Téc. error",       administrative: "Adm. error" },
+};
+
+function AnalysisBadge({
+  status,
+  analysisType,
+}: {
+  status: string | null;
+  analysisType: "technical" | "administrative";
+}) {
   if (!status) return null;
 
-  const configs: Record<string, { label: string; className: string; Icon: React.ElementType }> = {
-    done: {
-      label: "Procesado",
-      className: "bg-green-100 text-green-700 border-green-200",
-      Icon: CheckCircle,
-    },
-    running: {
-      label: "Procesando",
-      className: "bg-blue-100 text-blue-700 border-blue-200",
-      Icon: Loader2,
-    },
-    pending: {
-      label: "En cola",
-      className: "bg-amber-100 text-amber-700 border-amber-200",
-      Icon: Clock,
-    },
-    error: {
-      label: "Error",
-      className: "bg-red-100 text-red-700 border-red-200",
-      Icon: AlertCircle,
-    },
-  };
-
-  const config = configs[status];
+  const config = ANALYSIS_STATUS_CONFIGS[status];
   if (!config) return null;
-  const { label, className, Icon } = config;
+  const { className, Icon } = config;
+  const label = STATUS_SHORT_LABELS[status]?.[analysisType] ?? status;
 
   return (
     <span
@@ -96,7 +97,8 @@ export default function TenderRow({ tender, projectId, isFavorited, onToggleFavo
         </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           <p className="text-xs text-muted-foreground truncate">{tender.buyer_name}</p>
-          <AnalysisBadge status={tender.analysis_status} />
+          <AnalysisBadge status={tender.analysis_technical_status} analysisType="technical" />
+          <AnalysisBadge status={tender.analysis_administrative_status} analysisType="administrative" />
         </div>
       </div>
 

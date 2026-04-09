@@ -102,10 +102,10 @@ export default function InboxList({ tenders, projectId }: Props) {
     if (dismissed.has(t.id)) continue;
     if (t.model_score !== null) scoredCount++;
     if (favorites.has(t.id)) starredCount++;
-    if (t.analysis_status === "done") processedCount++;
+    if (t.analysis_technical_status === "done" || t.analysis_administrative_status === "done") processedCount++;
 
     if (activeTab === "starred" && !favorites.has(t.id)) continue;
-    if (activeTab === "processed" && t.analysis_status !== "done") continue;
+    if (activeTab === "processed" && t.analysis_technical_status !== "done" && t.analysis_administrative_status !== "done") continue;
     if (t.model_score !== null) {
       const rounded = Math.round(t.model_score);
       if (rounded < minScore || rounded > maxScore) continue;

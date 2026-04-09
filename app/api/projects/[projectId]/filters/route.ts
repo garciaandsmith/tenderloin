@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { dispatchWorkflow } from "@/lib/github/dispatch";
 
 interface Params {
@@ -48,7 +48,11 @@ export async function PUT(request: Request, { params }: Params) {
 
   const body = await request.json();
 
-  const { data, error } = await supabase
+  // Use service-role client for writes — the permission check above already
+  // enforces that only admins and project members can reach this point.
+  const adminSupabase = await createAdminClient();
+
+  const { data, error } = await adminSupabase
     .from("project_filters")
     .upsert(
       {
@@ -64,13 +68,13 @@ export async function PUT(request: Request, { params }: Params) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Increment filter_version on the saved row
-  await supabase
+  await adminSupabase
     .from("project_filters")
     .update({ filter_version: (data.filter_version ?? 1) + 1 })
     .eq("project_id", projectId);
 
   // Get current training session before incrementing (needed for score migration)
-  const { data: projectRow } = await supabase
+  const { data: projectRow } = await adminSupabase
     .from("projects")
     .select("training_session")
     .eq("id", projectId)
@@ -78,12 +82,12 @@ export async function PUT(request: Request, { params }: Params) {
   const fromSession = projectRow?.training_session ?? 1;
 
   // Increment training_session atomically and get the new value
-  const { data: newSessionData } = await supabase
+  const { data: newSessionData } = await adminSupabase
     .rpc("increment_training_session", { p_project_id: projectId });
   const toSession = (newSessionData as number | null) ?? fromSession + 1;
 
   // Migrate scores for tenders that still pass to the new training session
-  await supabase.rpc("migrate_training_scores", {
+  await adminSupabase.rpc("migrate_training_scores", {
     p_project_id: projectId,
     p_from_session: fromSession,
     p_to_session: toSession,

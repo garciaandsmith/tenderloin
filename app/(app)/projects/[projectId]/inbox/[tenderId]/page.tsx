@@ -11,6 +11,7 @@ import ScoreBadge from "@/components/inbox/ScoreBadge";
 import ProcessButton from "@/components/inbox/ProcessButton";
 import AnalysisPoller from "@/components/inbox/AnalysisPoller";
 import InboxSeenTracker from "@/components/inbox/InboxSeenTracker";
+import DebugFetchPanel from "@/components/inbox/DebugFetchPanel";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Licitación — Tenderloin" };
@@ -234,6 +235,8 @@ export default async function TenderDetailPage({ params }: Props) {
               </div>
             )}
           </AnalysisPanel>
+
+          <DebugFetchPanel tenderId={tender.id} />
         </div>
       </div>
     </div>

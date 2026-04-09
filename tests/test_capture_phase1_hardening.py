@@ -148,6 +148,35 @@ class CapturePhase1HardeningTests(unittest.TestCase):
             self.assertEqual(tender.duration_months, 12)
             self.assertEqual(tender.buyer_type, "local_entity")
 
+    def test_atom_parsing_supports_spanish_deadline_text(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            payload_path = Path(tmpdir) / "feed.xml"
+            payload_path.write_text(
+                """<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<feed xmlns=\"http://www.w3.org/2005/Atom\"
+      xmlns:cbc=\"urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2\">
+  <entry>
+    <id>exp-atom-002</id>
+    <title>Contrato Atom 2</title>
+    <summary>Resumen atom 2</summary>
+    <updated>2026-01-10T09:00:00Z</updated>
+    <cbc:PresentationPeriod>Hasta el 12/05/2026 23:59</cbc:PresentationPeriod>
+  </entry>
+</feed>
+""",
+                encoding="utf-8",
+            )
+
+            client = PlacspClient(PlacspClientConfig(source_url=f"file://{payload_path}"))
+            tenders = client.fetch_since(None)
+
+            self.assertEqual(len(tenders), 1)
+            tender = tenders[0]
+            self.assertEqual(
+                tender.deadline_at,
+                datetime(2026, 5, 12, 23, 59, tzinfo=timezone.utc),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -65,11 +65,19 @@ class LLMAnalyzer:
             f"{doc_section}"
         )
 
+        json_key = "services_required" if analysis_type == "technical" else "administrative_conditions"
+        enforced_prompt = (
+            system_prompt
+            + f'\n\nIMPORTANT: Always respond with a single valid JSON object and nothing else. '
+            f'Required format: {{"{json_key}": "<your full analysis here>"}}. '
+            f'Do not include any markdown, headers, or text outside the JSON object.'
+        )
+
         client = anthropic.Anthropic(api_key=self._api_key)
         message = client.messages.create(
             model=_MODEL,
             max_tokens=_MAX_TOKENS,
-            system=system_prompt,
+            system=enforced_prompt,
             messages=[{"role": "user", "content": user_content}],
         )
 
@@ -92,6 +100,14 @@ def _parse_json(text: str) -> dict:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
+
+    # Markdown code fence: ```json { ... } ``` or ``` { ... } ```
+    fence_match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text)
+    if fence_match:
+        try:
+            return json.loads(fence_match.group(1))
+        except json.JSONDecodeError:
+            pass
 
     match = re.search(r"\{[\s\S]*\}", text)
     if match:

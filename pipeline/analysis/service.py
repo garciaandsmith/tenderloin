@@ -150,6 +150,7 @@ def _process_one(
     # Fetch only the document type needed for this analysis (best-effort)
     pliego_texts = None
     attached_files: list[dict] = []
+    fetch_error: str | None = None
     try:
         pliego_texts = fetcher.fetch_texts(tender["link"], analysis_type)
         attached_files = [
@@ -157,6 +158,7 @@ def _process_one(
             for d in pliego_texts.attached_files
         ]
     except Exception as exc:
+        fetch_error = str(exc)
         logger.warning(
             "Document fetching failed for tender %d (%s, type=%s): %s — will analyse summary only.",
             tender_id, tender.get("link"), analysis_type, exc,
@@ -177,7 +179,7 @@ def _process_one(
     # Persist results — only write the column that belongs to this analysis type
     update_data: dict = {
         "status": "done",
-        "raw_llm_output": result.raw_llm_output,
+        "raw_llm_output": {**result.raw_llm_output, **({"fetch_error": fetch_error} if fetch_error else {})},
         "attached_files": attached_files or None,
         "completed_at": _now_iso(),
     }

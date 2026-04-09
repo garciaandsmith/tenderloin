@@ -100,14 +100,31 @@ export default function TenderRow({ tender, projectId, isFavorited, onToggleFavo
           <AnalysisBadge status={tender.analysis_technical_status} analysisType="technical" />
           <AnalysisBadge status={tender.analysis_administrative_status} analysisType="administrative" />
         </div>
+        {/* Mobile-only: budget + deadline inline */}
+        <div className="flex items-center gap-2 mt-1 lg:hidden">
+          <span className="text-xs font-medium">{formatBudget(tender.budget_amount)}</span>
+          <span className="text-xs text-muted-foreground">·</span>
+          <span
+            className={cn(
+              "text-xs",
+              deadline.expired
+                ? "text-destructive"
+                : deadline.urgent
+                ? "text-amber-600"
+                : "text-muted-foreground"
+            )}
+          >
+            {formatDate(tender.deadline_at)}
+          </span>
+        </div>
       </div>
 
-      {/* Right side: budget + deadline (with fixed widths matching headers) */}
-      <div className="shrink-0 w-24 text-right">
+      {/* Right side: budget + deadline — desktop only */}
+      <div className="hidden lg:block shrink-0 w-24 text-right">
         <p className="text-xs font-medium">{formatBudget(tender.budget_amount)}</p>
       </div>
 
-      <div className="shrink-0 w-20 text-right">
+      <div className="hidden lg:block shrink-0 w-20 text-right">
         <p
           className={cn(
             "text-xs",

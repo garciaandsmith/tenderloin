@@ -42,11 +42,15 @@ class PliegoTexts:
 class _AnunciosTableParser(HTMLParser):
     """Finds the XML view link for the 'Pliego' row in 'Anuncios y Documentos'.
 
-    The PLACSP tender page contains a section headed "Anuncios y Documentos"
-    with a table of publication rows. Each row has a document name cell and a
-    set of format-icon links (HTML, XML, PDF, download). This parser locates
-    any row whose document name contains "pliego" and returns the href of the
-    link whose URL contains "xml" — the CODICE/UBL XML publication.
+    Two known fragility fixes over the naive approach:
+    1. Heading text is accumulated across all child nodes and checked at the
+       closing tag — avoids false negatives when the heading text is split
+       across multiple DOM nodes (e.g. "Anuncios y <span>Documentos</span>").
+    2. XML links are collected for the whole row and matched at </tr> — avoids
+       missing the link when it appears before the "pliego" name cell.
+    3. Falls back to searching all table rows on the page if the
+       "Anuncios y Documentos" section heading is never found, so that pages
+       with a different heading structure are still handled.
     """
 
     def __init__(self, base_url: str) -> None:
@@ -54,56 +58,73 @@ class _AnunciosTableParser(HTMLParser):
         self.base_url = base_url
         self.pliego_xml_url: str | None = None
 
+        # Heading accumulation
+        self._in_heading = False
+        self._heading_text = ""
+        self._anuncios_section_found = False
         self._in_anuncios_section = False
+
+        # Row-level state
         self._in_row = False
-        self._in_doc_name_cell = False
-        self._current_row_has_pliego = False
+        self._in_cell = False
         self._current_cell_text = ""
-        self._pending_heading = False
+        self._current_row_has_pliego = False
+        self._current_row_xml_links: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple]) -> None:
         attr = dict(attrs)
 
-        if tag in ("h2", "h3", "h4"):
-            self._pending_heading = True
+        if tag in ("h2", "h3", "h4", "h5"):
+            self._in_heading = True
+            self._heading_text = ""
 
         if tag == "tr":
             self._in_row = True
             self._current_row_has_pliego = False
+            self._current_row_xml_links = []
 
-        if tag == "td" and self._in_anuncios_section and self._in_row:
-            self._in_doc_name_cell = True
+        if tag == "td" and self._in_row:
+            self._in_cell = True
             self._current_cell_text = ""
 
-        if tag == "a" and self._in_anuncios_section and self._in_row:
+        if tag == "a" and self._in_row:
             href = attr.get("href", "")
-            if href and self._current_row_has_pliego and self.pliego_xml_url is None:
-                if "xml" in href.lower():
-                    self.pliego_xml_url = urljoin(self.base_url, href)
+            if href and "xml" in href.lower():
+                self._current_row_xml_links.append(urljoin(self.base_url, href))
 
     def handle_data(self, data: str) -> None:
-        text = data.strip()
-
-        if self._pending_heading:
-            if "anuncios" in text.lower() and "documentos" in text.lower():
-                self._in_anuncios_section = True
-            self._pending_heading = False
-
-        if self._in_doc_name_cell:
-            self._current_cell_text += text
+        if self._in_heading:
+            self._heading_text += data
+        if self._in_cell:
+            self._current_cell_text += data
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in ("h2", "h3", "h4"):
-            self._pending_heading = False
+        if tag in ("h2", "h3", "h4", "h5"):
+            ht = self._heading_text.lower()
+            if "anuncios" in ht and "documentos" in ht:
+                self._in_anuncios_section = True
+                self._anuncios_section_found = True
+            elif self._anuncios_section_found:
+                # A new section heading started — leave the anuncios section
+                self._in_anuncios_section = False
+            self._in_heading = False
 
-        if tag == "td" and self._in_doc_name_cell:
+        if tag == "td" and self._in_cell:
             if "pliego" in self._current_cell_text.strip().lower():
                 self._current_row_has_pliego = True
-            self._in_doc_name_cell = False
+            self._in_cell = False
 
         if tag == "tr":
+            if (
+                self._current_row_has_pliego
+                and self._current_row_xml_links
+                and self.pliego_xml_url is None
+            ):
+                # Accept this row if it's inside the expected section, or if
+                # that section was never found (fallback: accept any row).
+                if self._in_anuncios_section or not self._anuncios_section_found:
+                    self.pliego_xml_url = self._current_row_xml_links[0]
             self._in_row = False
-            self._current_row_has_pliego = False
 
 
 # ─── XML parser: extract document URLs by analysis type ───────────────────────
@@ -162,14 +183,24 @@ def _get_extension(url: str) -> str:
     return ext if len(ext) <= 5 else ""
 
 
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (compatible; Tenderloin/1.0; "
+        "+https://github.com/garciaandsmith/tenderloin)"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "es,en;q=0.5",
+}
+
+
 def _fetch_url(url: str) -> str:
-    req = Request(url, headers={"User-Agent": "Tenderloin/1.0"})
+    req = Request(url, headers=_HEADERS)
     with urlopen(req, timeout=_TIMEOUT_SECONDS) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
 
 def _fetch_bytes(url: str) -> bytes:
-    req = Request(url, headers={"User-Agent": "Tenderloin/1.0"})
+    req = Request(url, headers=_HEADERS)
     with urlopen(req, timeout=_TIMEOUT_SECONDS) as resp:
         return resp.read(_MAX_BYTES)
 

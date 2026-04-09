@@ -138,6 +138,18 @@ async function runDiagnostics(tenderUrl: string): Promise<DiagnosticStep[]> {
       signal: AbortSignal.timeout(30_000),
     });
     xmlText = await resp.text();
+    if (!resp.ok) {
+      steps.push({
+        label: "Abrir XML del Pliego",
+        status: "fail",
+        detail: `HTTP ${resp.status} — el servidor devolvió un error`,
+      });
+      return [
+        ...steps,
+        skip("Enlace al documento técnico (PPT)"),
+        skip("Enlace al documento administrativo (PCAP)"),
+      ];
+    }
     steps.push({
       label: "Abrir XML del Pliego",
       status: "ok",
@@ -176,6 +188,16 @@ function skip(label: string): DiagnosticStep {
   return { label, status: "skip", detail: "" };
 }
 
+/** Decode the HTML entities that browsers resolve before using href values. */
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+}
+
 function findPliegoXmlLink(html: string): { hasPliego: boolean; xmlHref: string | null } {
   let pos = 0;
   while (true) {
@@ -190,9 +212,10 @@ function findPliegoXmlLink(html: string): { hasPliego: boolean; xmlHref: string 
 
     // Found the pliego row. The HTML and XML view links share identical-looking
     // URLs — the only signal is the icon image name inside each <a> tag.
+    // Decode HTML entities in the href (e.g. &amp; → &) before returning it.
     const aBlocks = [...row.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)];
     for (const [, href, inner] of aBlocks) {
-      if (/xml-icon/i.test(inner)) return { hasPliego: true, xmlHref: href };
+      if (/xml-icon/i.test(inner)) return { hasPliego: true, xmlHref: decodeHtmlEntities(href) };
     }
     return { hasPliego: true, xmlHref: null };
   }

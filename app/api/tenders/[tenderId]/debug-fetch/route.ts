@@ -188,10 +188,11 @@ function findPliegoXmlLink(html: string): { hasPliego: boolean; xmlHref: string 
 
     if (!/pliego/i.test(row)) continue;
 
-    // Found a pliego row — look for an href containing "xml"
-    const hrefs = [...row.matchAll(/href=["']([^"']+)["']/gi)];
-    for (const h of hrefs) {
-      if (/xml/i.test(h[1])) return { hasPliego: true, xmlHref: h[1] };
+    // Found the pliego row. The HTML and XML view links share identical-looking
+    // URLs — the only signal is the icon image name inside each <a> tag.
+    const aBlocks = [...row.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)];
+    for (const [, href, inner] of aBlocks) {
+      if (/xml-icon/i.test(inner)) return { hasPliego: true, xmlHref: href };
     }
     return { hasPliego: true, xmlHref: null };
   }

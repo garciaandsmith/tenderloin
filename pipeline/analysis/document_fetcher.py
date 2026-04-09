@@ -50,7 +50,10 @@ class _AnunciosTableParser(HTMLParser):
     etc.) and regardless of heading structure.  Within that element, scans
     ``<tr>`` rows for:
       - any ``<td>`` cell whose text contains "pliego" (also language-stable)
-      - any ``<a href>`` whose URL contains "xml"
+      - any ``<a href>`` that wraps an ``<img src="...xml-icon...">``
+
+    The HTML and XML view links share identical-looking URLs; the only reliable
+    signal is the icon image name inside the ``<a>`` tag.
 
     Falls back to searching all rows on the page if the target ID is not found,
     preserving previous behaviour for any edge-case page layouts.
@@ -73,6 +76,9 @@ class _AnunciosTableParser(HTMLParser):
         self._current_row_has_pliego = False
         self._current_row_xml_links: list[str] = []
 
+        # Link-level state: href of the <a> currently open inside a row
+        self._current_link_href: str | None = None
+
     def handle_starttag(self, tag: str, attrs: list[tuple]) -> None:
         attr = dict(attrs)
 
@@ -93,9 +99,16 @@ class _AnunciosTableParser(HTMLParser):
             self._current_cell_text = ""
 
         if tag == "a" and self._in_row:
-            href = attr.get("href", "")
-            if href and "xml" in href.lower():
-                self._current_row_xml_links.append(urljoin(self.base_url, href))
+            # Record the href; the link type will be determined by its child <img>
+            self._current_link_href = attr.get("href") or None
+
+        if tag == "img" and self._in_row and self._current_link_href:
+            # The XML view link is identified by xml-icon in the image src
+            if "xml-icon" in attr.get("src", "").lower():
+                self._current_row_xml_links.append(
+                    urljoin(self.base_url, self._current_link_href)
+                )
+                self._current_link_href = None  # consumed
 
     def handle_data(self, data: str) -> None:
         if self._in_cell:
@@ -106,6 +119,9 @@ class _AnunciosTableParser(HTMLParser):
             self._target_table_depth -= 1
             if self._target_table_depth == 0:
                 self._in_target_table = False
+
+        if tag == "a":
+            self._current_link_href = None
 
         if tag == "td" and self._in_cell:
             if "pliego" in self._current_cell_text.strip().lower():

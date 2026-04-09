@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createClient, createAuthAdminClient } from "@/lib/supabase/server";
 import { dispatchWorkflow } from "@/lib/github/dispatch";
 
 interface Params {
@@ -50,7 +50,11 @@ export async function PUT(request: Request, { params }: Params) {
 
   // Use service-role client for writes — the permission check above already
   // enforces that only admins and project members can reach this point.
-  const adminSupabase = await createAdminClient();
+  // createAuthAdminClient uses @supabase/supabase-js without cookies so the
+  // service role key is the only credential sent, which actually bypasses RLS.
+  // createAdminClient (ssr) still forwards the user JWT via cookies, which
+  // takes precedence over the service role key and leaves RLS active.
+  const adminSupabase = createAuthAdminClient();
 
   const { data, error } = await adminSupabase
     .from("project_filters")

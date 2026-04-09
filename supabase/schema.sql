@@ -297,3 +297,8 @@ create policy "analysis_select" on public.tender_analysis
 
 create policy "analysis_insert" on public.tender_analysis
   for insert with check (is_project_member(project_id) and triggered_by = auth.uid());
+
+create policy "analysis_update" on public.tender_analysis
+  for update
+  using  (is_project_member(project_id) or is_admin())
+  with check (is_project_member(project_id) or is_admin());

@@ -186,6 +186,8 @@ export default async function TenderDetailPage({ params }: Props) {
             projectId={projectId}
             userId={user!.id}
             analysisType="technical"
+            fetchError={technicalAnalysis?.raw_llm_output?.fetch_error ?? null}
+            errorMessage={technicalAnalysis?.raw_llm_output?.error ?? null}
           >
             {technicalAnalysis?.status === "done" && (
               <div className="space-y-4">
@@ -214,6 +216,8 @@ export default async function TenderDetailPage({ params }: Props) {
             projectId={projectId}
             userId={user!.id}
             analysisType="administrative"
+            fetchError={adminAnalysis?.raw_llm_output?.fetch_error ?? null}
+            errorMessage={adminAnalysis?.raw_llm_output?.error ?? null}
           >
             {adminAnalysis?.status === "done" && (
               <div className="space-y-4">
@@ -247,6 +251,8 @@ function AnalysisPanel({
   projectId,
   userId,
   analysisType,
+  fetchError,
+  errorMessage,
   children,
 }: {
   title: string;
@@ -258,6 +264,8 @@ function AnalysisPanel({
   projectId: string;
   userId: string;
   analysisType: "technical" | "administrative";
+  fetchError?: string | null;
+  errorMessage?: string | null;
   children?: React.ReactNode;
 }) {
   return (
@@ -287,8 +295,20 @@ function AnalysisPanel({
       )}
 
       {analysis?.status === "error" && (
-        <div className="rounded-md bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
-          El análisis encontró un error. Puedes intentarlo de nuevo con el botón de arriba.
+        <div className="rounded-md bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive space-y-1">
+          <p>El análisis encontró un error. Puedes intentarlo de nuevo con el botón de arriba.</p>
+          {(fetchError || errorMessage) && (
+            <p className="font-mono text-xs opacity-75 break-all">
+              {fetchError ?? errorMessage}
+            </p>
+          )}
+        </div>
+      )}
+
+      {analysis?.status === "done" && fetchError && (
+        <div className="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800 space-y-1">
+          <p className="font-medium">No se pudo obtener el documento — el análisis se realizó solo con el resumen.</p>
+          <p className="font-mono text-xs opacity-75 break-all">{fetchError}</p>
         </div>
       )}
 

@@ -251,24 +251,29 @@ class DocumentFetcher:
           - 'technical'      → TechnicalDocumentReference → ppt_text
           - 'administrative' → LegalDocumentReference     → pcap_text
 
-        Returns a PliegoTexts dataclass. Any step that fails is logged as a
-        warning and results in an empty string for that document.
+        Raises ValueError if the XML link or document reference elements cannot
+        be found — the caller is responsible for catching and logging this.
+        Document download failures are best-effort and do not raise.
         """
         result = PliegoTexts()
 
         xml_url = self.fetch_pliego_xml_url(tender_url)
         if not xml_url:
-            return result
+            raise ValueError(f"No Pliego XML link found on tender page: {tender_url}")
 
         try:
             xml_text = _fetch_url(xml_url)
         except Exception as exc:
-            logger.warning("Could not fetch Pliego XML %s: %s", xml_url, exc)
-            return result
+            raise ValueError(f"Could not fetch Pliego XML {xml_url}: {exc}") from exc
 
+        tag_name = (
+            "TechnicalDocumentReference"
+            if analysis_type == "technical"
+            else "LegalDocumentReference"
+        )
         doc_urls = _parse_xml_doc_urls(xml_text, analysis_type)
         if not doc_urls:
-            return result
+            raise ValueError(f"No <{tag_name}> elements found in XML: {xml_url}")
 
         is_technical = analysis_type == "technical"
         doc_name = (

@@ -165,16 +165,20 @@ def _process_one(
         )
 
     # Call the LLM with the project-configured prompt
-    result = _call_with_retry(
-        analyzer,
-        title=tender["title"],
-        summary=tender["summary"],
-        link=tender["link"],
-        analysis_type=analysis_type,
-        ppt_text=pliego_texts.ppt_text if pliego_texts else "",
-        pcap_text=pliego_texts.pcap_text if pliego_texts else "",
-        system_prompt=prompt,
-    )
+    try:
+        result = _call_with_retry(
+            analyzer,
+            title=tender["title"],
+            summary=tender["summary"],
+            link=tender["link"],
+            analysis_type=analysis_type,
+            ppt_text=pliego_texts.ppt_text if pliego_texts else "",
+            pcap_text=pliego_texts.pcap_text if pliego_texts else "",
+            system_prompt=prompt,
+        )
+    except Exception as exc:
+        _mark_error(client, analysis_id, str(exc), fetch_error=fetch_error)
+        return 0
 
     # Persist results — only write the column that belongs to this analysis type
     update_data: dict = {
@@ -213,10 +217,13 @@ def _call_with_retry(analyzer, *, max_attempts: int = 3, **kwargs):
             time.sleep(wait)
 
 
-def _mark_error(client, analysis_id: int, error_message: str) -> None:
+def _mark_error(client, analysis_id: int, error_message: str, *, fetch_error: str | None = None) -> None:
+    payload: dict = {"error": error_message}
+    if fetch_error:
+        payload["fetch_error"] = fetch_error
     client.table("tender_analysis").update({
         "status": "error",
-        "raw_llm_output": {"error": error_message},
+        "raw_llm_output": payload,
         "completed_at": _now_iso(),
     }).eq("id", analysis_id).execute()
 

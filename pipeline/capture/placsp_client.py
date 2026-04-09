@@ -6,6 +6,7 @@ from email.utils import parsedate_to_datetime
 import io
 import json
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Iterable, List, Optional
@@ -351,17 +352,56 @@ def _find_first_text_by_localname(node: ET.Element, local_names: Iterable[str]) 
 def _parse_datetime(value: str) -> Optional[datetime]:
     if not value:
         return None
+    raw = value.strip()
     try:
-        if value.endswith("Z"):
-            return datetime.fromisoformat(value.replace("Z", "+00:00"))
-        return datetime.fromisoformat(value)
+        if raw.endswith("Z"):
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return datetime.fromisoformat(raw)
     except ValueError:
         pass
 
+    # PLACSP values sometimes come in Spanish free text, for example:
+    # "Hasta el 12/05/2026 23:59". We extract and parse the date portion.
+    if match := re.search(
+        r"(\d{1,2}[/-]\d{1,2}[/-]\d{4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?",
+        raw,
+    ):
+        parsed = _parse_day_first_datetime(match.group(1), match.group(2))
+        if parsed is not None:
+            return parsed
+
     try:
-        return parsedate_to_datetime(value)
+        return parsedate_to_datetime(raw)
     except (TypeError, ValueError):
         return None
+
+
+def _parse_day_first_datetime(date_part: str, time_part: Optional[str] = None) -> Optional[datetime]:
+    normalised_date = date_part.replace("-", "/")
+    for fmt in ("%d/%m/%Y",):
+        try:
+            parsed_date = datetime.strptime(normalised_date, fmt)
+            break
+        except ValueError:
+            parsed_date = None
+    if parsed_date is None:
+        return None
+
+    if not time_part:
+        return parsed_date.replace(tzinfo=timezone.utc)
+
+    for time_fmt in ("%H:%M:%S", "%H:%M"):
+        try:
+            parsed_time = datetime.strptime(time_part, time_fmt)
+            return parsed_date.replace(
+                hour=parsed_time.hour,
+                minute=parsed_time.minute,
+                second=parsed_time.second,
+                tzinfo=timezone.utc,
+            )
+        except ValueError:
+            continue
+    return parsed_date.replace(tzinfo=timezone.utc)
 
 
 def _count_by_localname(node: ET.Element, local_name: str) -> int:

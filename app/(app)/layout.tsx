@@ -49,9 +49,9 @@ export default async function AppLayout({
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar profile={profile} projects={sidebarProjects} />
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <TopNav profile={profile} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <TopNav profile={profile} projects={sidebarProjects} />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );

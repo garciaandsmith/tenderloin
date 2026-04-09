@@ -4,12 +4,14 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { Profile } from "@/lib/types/app.types";
 import { LogOut, User } from "lucide-react";
+import MobileNav from "./MobileNav";
 
 interface Props {
   profile: Pick<Profile, "email" | "full_name" | "role"> | null;
+  projects: Array<{ id: string; name: string }>;
 }
 
-export default function TopNav({ profile }: Props) {
+export default function TopNav({ profile, projects }: Props) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -20,7 +22,8 @@ export default function TopNav({ profile }: Props) {
   }
 
   return (
-    <header className="flex items-center justify-between px-6 py-3 border-b bg-card h-14 shrink-0">
+    <header className="flex items-center gap-2 px-4 sm:px-6 py-3 border-b bg-card h-14 shrink-0">
+      <MobileNav profile={profile} projects={projects} />
       <div className="md:hidden font-bold text-base">🥩 Tenderloin</div>
       <div className="flex-1" />
       <div className="flex items-center gap-3">

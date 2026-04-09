@@ -2,7 +2,7 @@
 
 Two-step fetch:
   1. Parse the tender's main page HTML to find the XML link for the 'Pliego'
-     row in the 'Anuncios y Documentos' table.
+     row in the documents table (id="myTablaDetalleVISUOE").
   2. Parse that XML (CODICE / UBL format published by PLACSP) and follow either
        - TechnicalDocumentReference  → for 'technical' analysis
        - LegalDocumentReference      → for 'administrative' analysis
@@ -37,20 +37,23 @@ class PliegoTexts:
     attached_files: list[dict] = field(default_factory=list)
 
 
-# ─── HTML parser: find the XML link in "Anuncios y Documentos" ────────────────
+# ─── HTML parser: find the XML link in the documents table ───────────────────
+
+_TARGET_TABLE_ID = "myTablaDetalleVISUOE"
+
 
 class _AnunciosTableParser(HTMLParser):
-    """Finds the XML view link for the 'Pliego' row in 'Anuncios y Documentos'.
+    """Finds the XML view link for the 'Pliego' row in the documents table.
 
-    Two known fragility fixes over the naive approach:
-    1. Heading text is accumulated across all child nodes and checked at the
-       closing tag — avoids false negatives when the heading text is split
-       across multiple DOM nodes (e.g. "Anuncios y <span>Documentos</span>").
-    2. XML links are collected for the whole row and matched at </tr> — avoids
-       missing the link when it appears before the "pliego" name cell.
-    3. Falls back to searching all table rows on the page if the
-       "Anuncios y Documentos" section heading is never found, so that pages
-       with a different heading structure are still handled.
+    Anchors on the stable element ID ``myTablaDetalleVISUOE`` which PLACSP
+    uses consistently across all page languages (Spanish, Catalan, Galician,
+    etc.) and regardless of heading structure.  Within that element, scans
+    ``<tr>`` rows for:
+      - any ``<td>`` cell whose text contains "pliego" (also language-stable)
+      - any ``<a href>`` whose URL contains "xml"
+
+    Falls back to searching all rows on the page if the target ID is not found,
+    preserving previous behaviour for any edge-case page layouts.
     """
 
     def __init__(self, base_url: str) -> None:
@@ -58,11 +61,10 @@ class _AnunciosTableParser(HTMLParser):
         self.base_url = base_url
         self.pliego_xml_url: str | None = None
 
-        # Heading accumulation
-        self._in_heading = False
-        self._heading_text = ""
-        self._anuncios_section_found = False
-        self._in_anuncios_section = False
+        # Target-table scope tracking (depth handles nested elements)
+        self._in_target_table = False
+        self._target_table_depth = 0
+        self._target_table_found = False
 
         # Row-level state
         self._in_row = False
@@ -74,11 +76,14 @@ class _AnunciosTableParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple]) -> None:
         attr = dict(attrs)
 
-        if tag in ("h2", "h3", "h4", "h5"):
-            self._in_heading = True
-            self._heading_text = ""
+        if attr.get("id") == _TARGET_TABLE_ID:
+            self._in_target_table = True
+            self._target_table_depth = 1
+            self._target_table_found = True
+        elif self._in_target_table:
+            self._target_table_depth += 1
 
-        if tag == "tr":
+        if tag == "tr" and (self._in_target_table or not self._target_table_found):
             self._in_row = True
             self._current_row_has_pliego = False
             self._current_row_xml_links = []
@@ -93,37 +98,27 @@ class _AnunciosTableParser(HTMLParser):
                 self._current_row_xml_links.append(urljoin(self.base_url, href))
 
     def handle_data(self, data: str) -> None:
-        if self._in_heading:
-            self._heading_text += data
         if self._in_cell:
             self._current_cell_text += data
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in ("h2", "h3", "h4", "h5"):
-            ht = self._heading_text.lower()
-            if "anuncios" in ht and "documentos" in ht:
-                self._in_anuncios_section = True
-                self._anuncios_section_found = True
-            elif self._anuncios_section_found:
-                # A new section heading started — leave the anuncios section
-                self._in_anuncios_section = False
-            self._in_heading = False
+        if self._in_target_table:
+            self._target_table_depth -= 1
+            if self._target_table_depth == 0:
+                self._in_target_table = False
 
         if tag == "td" and self._in_cell:
             if "pliego" in self._current_cell_text.strip().lower():
                 self._current_row_has_pliego = True
             self._in_cell = False
 
-        if tag == "tr":
+        if tag == "tr" and self._in_row:
             if (
                 self._current_row_has_pliego
                 and self._current_row_xml_links
                 and self.pliego_xml_url is None
             ):
-                # Accept this row if it's inside the expected section, or if
-                # that section was never found (fallback: accept any row).
-                if self._in_anuncios_section or not self._anuncios_section_found:
-                    self.pliego_xml_url = self._current_row_xml_links[0]
+                self.pliego_xml_url = self._current_row_xml_links[0]
             self._in_row = False
 
 

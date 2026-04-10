@@ -53,7 +53,7 @@ export default async function IngestionPage({ searchParams }: Props) {
     duration_max,
     published_from,
     published_to,
-    sort = "created_at",
+    sort = "ingested_at",
     sort_dir = "desc",
   } = params;
 
@@ -77,14 +77,14 @@ export default async function IngestionPage({ searchParams }: Props) {
 
   if (profile?.role !== "admin") redirect("/home");
 
-  // Status metrics
+  // Status metrics: read the ingestion-specific state key
   const [{ data: stateRow }, { count: totalTenders }] = await Promise.all([
     supabase
       .from("pipeline_state")
       .select("*")
-      .eq("key", "capture.last_successful_run_at")
+      .eq("key", "ingestion.last_successful_run_at")
       .maybeSingle(),
-    supabase.from("tenders_raw").select("*", { count: "exact", head: true }),
+    supabase.from("tenders_ingested").select("*", { count: "exact", head: true }),
   ]);
 
   const lastRunAt = stateRow?.value ?? null;
@@ -94,13 +94,13 @@ export default async function IngestionPage({ searchParams }: Props) {
     ? Math.round((now.getTime() - lastRun.getTime()) / (1000 * 60 * 60))
     : null;
 
-  // Build query with all 18 columns
-  let query = supabase.from("tenders_raw").select(
-    "id, external_id, title, summary, link, published_at, deadline_at, buyer_name, region, cpv, budget_amount, source, created_at, contract_type, procedure_type, lot_count, duration_months, buyer_type",
+  // Build query against tenders_ingested
+  let query = supabase.from("tenders_ingested").select(
+    "id, external_id, title, summary, link, published_at, deadline_at, buyer_name, region, cpv, budget_amount, source, ingested_at, contract_type, procedure_type, lot_count, duration_months, buyer_type, status, version_at",
     { count: "exact" }
   );
 
-  // Status filter
+  // Status filter (active = deadline in future, inactive = deadline passed)
   if (status === "active") {
     query = query.gt("deadline_at", now.toISOString());
   } else if (status === "inactive") {
@@ -135,17 +135,17 @@ export default async function IngestionPage({ searchParams }: Props) {
   if (published_from) query = query.gte("published_at", published_from);
   if (published_to) query = query.lte("published_at", `${published_to}T23:59:59`);
 
-  // Sorting
+  // Sorting — ingested_at replaces created_at as the default
   const validSortFields = [
     "id",
     "published_at",
     "deadline_at",
-    "created_at",
+    "ingested_at",
     "budget_amount",
     "lot_count",
     "duration_months",
   ];
-  const sortField = validSortFields.includes(sort) ? sort : "created_at";
+  const sortField = validSortFields.includes(sort) ? sort : "ingested_at";
   const ascending = sort_dir === "asc";
   query = query.order(sortField, { ascending, nullsFirst: false });
 
@@ -159,24 +159,30 @@ export default async function IngestionPage({ searchParams }: Props) {
 
   const totalPages = Math.ceil((filteredCount ?? 0) / perPage);
 
+  // Map ingested_at → created_at so IngestionTable (which uses created_at) works unchanged
+  const mappedTenders = (tenders ?? []).map((t) => ({
+    ...t,
+    created_at: (t as Record<string, unknown>).ingested_at ?? null,
+  }));
+
   return (
     <div className="max-w-full space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Ingestion</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Standalone tender ingestion — raw data browser and loader
+          Standalone tender ingestion — version-aware data browser and loader
         </p>
       </div>
 
-      {/* Data Loader Panel (shell) */}
+      {/* Data Loader Panel */}
       <IngestionLoaderPanel lastRunAt={lastRunAt} />
 
       {/* Status bar */}
       <div className="rounded-lg border bg-card p-4 flex flex-wrap gap-6">
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-wide">
-            Last pipeline capture
+            Last ingestion run
           </p>
           <p className="font-semibold mt-0.5">
             {lastRun ? formatDate(lastRun.toISOString()) : "Never"}
@@ -233,7 +239,7 @@ export default async function IngestionPage({ searchParams }: Props) {
 
       {/* Table */}
       <IngestionTable
-        tenders={(tenders ?? []) as TenderRow[]}
+        tenders={mappedTenders as TenderRow[]}
         currentSort={sortField}
         currentDir={sort_dir}
         totalPages={totalPages}

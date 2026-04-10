@@ -3,26 +3,36 @@ name: Ingest Historical Tenders
 on:
   workflow_dispatch:
     inputs:
+      # New format: YYYY-MM strings (used by the admin panel API)
+      start_month:
+        description: 'Start month in YYYY-MM format (e.g. 2024-01)'
+        required: false
+        default: ''
+      end_month:
+        description: 'End month in YYYY-MM format (e.g. 2024-12). Defaults to current month.'
+        required: false
+        default: ''
+      # Legacy format kept for manual triggers from the GitHub UI
       from_year:
-        description: 'Start year (inclusive)'
-        required: true
+        description: '[Legacy] Start year (ignored when start_month is set)'
+        required: false
         default: '2022'
       from_month:
-        description: 'Start month 1–12 (inclusive)'
-        required: true
+        description: '[Legacy] Start month 1–12 (ignored when start_month is set)'
+        required: false
         default: '1'
       to_year:
-        description: 'End year (inclusive, defaults to current year)'
+        description: '[Legacy] End year (ignored when start_month is set)'
         required: false
         default: ''
       to_month:
-        description: 'End month 1–12 (inclusive, defaults to current month)'
+        description: '[Legacy] End month 1–12 (ignored when start_month is set)'
         required: false
         default: ''
 
 jobs:
-  ingest:
-    name: Bulk ingest historical PLACSP ZIPs
+  ingest_historical:
+    name: Bulk ingest historical PLACSP ZIPs into tenders_ingested
     runs-on: ubuntu-latest
     # Historical ingestion can take a long time for wide date ranges
     timeout-minutes: 360
@@ -47,29 +57,33 @@ jobs:
       - name: Build date-range args
         id: args
         run: |
+          START_MONTH="${{ github.event.inputs.start_month }}"
+          END_MONTH="${{ github.event.inputs.end_month }}"
           FROM_YEAR="${{ github.event.inputs.from_year }}"
           FROM_MONTH="${{ github.event.inputs.from_month }}"
           TO_YEAR="${{ github.event.inputs.to_year }}"
           TO_MONTH="${{ github.event.inputs.to_month }}"
 
-          EXTRA_ARGS=""
-          if [ -n "$TO_YEAR" ]; then
-            EXTRA_ARGS="$EXTRA_ARGS --to-year $TO_YEAR"
-          fi
-          if [ -n "$TO_MONTH" ]; then
-            EXTRA_ARGS="$EXTRA_ARGS --to-month $TO_MONTH"
+          if [ -n "$START_MONTH" ]; then
+            # New YYYY-MM format
+            CMD="--start $START_MONTH"
+            if [ -n "$END_MONTH" ]; then
+              CMD="$CMD --end $END_MONTH"
+            fi
+          else
+            # Legacy format: convert to YYYY-MM
+            PADDED_FROM_MONTH=$(printf "%02d" "$FROM_MONTH")
+            CMD="--start ${FROM_YEAR}-${PADDED_FROM_MONTH}"
+            if [ -n "$TO_YEAR" ] && [ -n "$TO_MONTH" ]; then
+              PADDED_TO_MONTH=$(printf "%02d" "$TO_MONTH")
+              CMD="$CMD --end ${TO_YEAR}-${PADDED_TO_MONTH}"
+            fi
           fi
 
-          echo "cmd=--from-year $FROM_YEAR --from-month $FROM_MONTH $EXTRA_ARGS" >> "$GITHUB_OUTPUT"
+          echo "cmd=$CMD" >> "$GITHUB_OUTPUT"
 
-      - name: Ingest historical tenders
+      - name: Ingest historical tenders into tenders_ingested
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m pipeline.run_ingest_historical ${{ steps.args.outputs.cmd }}
-
-      - name: Run hard filters on newly ingested tenders
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m pipeline.run_filter
+        run: python -m pipeline.run_ingestion_historical ${{ steps.args.outputs.cmd }}

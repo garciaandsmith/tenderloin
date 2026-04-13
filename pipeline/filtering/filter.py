@@ -123,7 +123,7 @@ def _filter_project(
         resp = (
             client.table("tenders_raw")
             .select(
-                "id, title, summary, region, cpv, budget_amount, "
+                "id, title, summary, region, cpv, cpv_codes, status, budget_amount, "
                 "contract_type, procedure_type, lot_count, duration_months, buyer_type"
             )
             .gt("id", cursor_id)
@@ -184,10 +184,17 @@ def _evaluate_tender(
         if not any(tender_region.startswith(r) for r in cfg["regions"]):
             reasons.append("region_mismatch")
 
-    # CPV codes (prefix match)
+    # CPV codes (prefix match against all CPV codes on the tender)
     if cfg.get("cpv_codes"):
-        tender_cpv = (tender.get("cpv") or "").strip()
-        if not any(tender_cpv.startswith(c) for c in cfg["cpv_codes"]):
+        primary = (tender.get("cpv") or "").strip()
+        all_codes = list(tender.get("cpv_codes") or [])
+        if primary and primary not in all_codes:
+            all_codes.insert(0, primary)
+        if not any(
+            code.startswith(prefix)
+            for code in all_codes
+            for prefix in cfg["cpv_codes"]
+        ):
             reasons.append("cpv_mismatch")
 
     # Contract type — NULL means not captured; treat as unknown (pass through).

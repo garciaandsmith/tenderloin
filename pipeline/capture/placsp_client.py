@@ -232,32 +232,85 @@ class PlacspClient:
                 link = link_node.attrib.get("href", "")
 
             published_at = _parse_datetime(published_raw) or datetime.now(timezone.utc)
-            deadline_at = _parse_datetime(
-                _find_first_text_by_localname(entry, ["DeadlineDate", "EndDate", "PresentationPeriod"])
+
+            # Deadline: prefer the structured UBL path, fall back to flat search
+            deadline_raw = (
+                _path_text(entry, "TenderingProcess", "TenderSubmissionDeadlinePeriod", "EndDate")
+                or _path_text(entry, "TenderingProcess", "TenderSubmissionDeadlinePeriod", "EndDateTime")
+                or _find_first_text_by_localname(entry, ["DeadlineDate", "EndDate", "PresentationPeriod"])
             )
+            deadline_at = _parse_datetime(deadline_raw) if deadline_raw else None
+
             buyer_name = (
-                _find_nested_text(entry, "LocatedContractingParty", "Name")
+                _path_text(entry, "ContractingParty", "Party", "PartyName", "Name")
+                or _path_text(entry, "ContractingParty", "PartyName", "Name")
+                or _find_nested_text(entry, "LocatedContractingParty", "Name")
                 or _find_first_text_by_localname(entry, ["BuyerProfile", "ContractingParty", "PartyName"])
                 or ""
             )
-            region = _find_first_text_by_localname(entry, ["CountrySubentityCode", "NUTSCode", "Region", "PlaceExecution"]) or ""
-            cpv = _find_first_text_by_localname(entry, ["ItemClassificationCode", "CPV", "CPVCode"]) or ""
-            budget_amount = _parse_float(
-                _find_first_text_by_localname(entry, ["TotalAmount", "BudgetAmount", "EstimatedOverallContractAmount"])
+            region = (
+                _path_text(entry, "ProcurementProject", "RealizedLocation", "Address", "CountrySubentityCode")
+                or _find_first_text_by_localname(entry, ["CountrySubentityCode", "NUTSCode", "Region", "PlaceExecution"])
+                or ""
             )
-            contract_type = _normalise_contract_type(
-                _find_nested_text(entry, "ProcurementProject", "TypeCode")
+
+            # CPV: collect all codes; keep first as primary for backward compat
+            cpv_codes = _extract_all_cpv_codes(entry)
+            cpv = cpv_codes[0] if cpv_codes else ""
+
+            budget_amount = _parse_float(
+                _path_text(entry, "TenderingTerms", "BudgetAmount", "TaxExclusiveAmount")
+                or _path_text(entry, "TenderingTerms", "BudgetAmount", "TotalAmount")
+                or _find_first_text_by_localname(entry, ["TotalAmount", "BudgetAmount", "EstimatedOverallContractAmount"])
+            )
+
+            # Contract type: direct-child path is more precise than flat search
+            _ct_raw = (
+                _path_text(entry, "ProcurementProject", "TypeCode")
                 or _find_first_text_by_localname(entry, ["ContractTypeCode"])
             )
+            contract_type = _normalise_contract_type(_ct_raw or "")
+
             procedure_type = _normalise_procedure_type(
-                _find_first_text_by_localname(entry, ["ProcedureCode"])
+                _path_text(entry, "TenderingProcess", "ProcedureCode")
+                or _find_first_text_by_localname(entry, ["ProcedureCode"])
+                or ""
             )
             lot_count = _count_by_localname(entry, "ProcurementProjectLot") or None
-            duration_months = _parse_int(
-                _find_first_text_by_localname(entry, ["DurationMeasure", "Duration"])
-            )
+
+            # Duration: (1) DurationMeasure with MON unit, (2) Duration text,
+            # (3) derive from PlannedPeriod start/end dates
+            duration_months: Optional[int] = None
+            for dm_el in _find_all_by_localname(entry, "DurationMeasure"):
+                unit = dm_el.attrib.get("unitCode", "").upper()
+                if unit in ("MON", "MONTH", ""):
+                    val = _parse_int(dm_el.text)
+                    if val is not None:
+                        duration_months = val
+                        break
+            if duration_months is None:
+                duration_months = _parse_int(
+                    _find_first_text_by_localname(entry, ["Duration"])
+                )
+            if duration_months is None:
+                _start = _path_text(entry, "ProcurementProject", "PlannedPeriod", "StartDate")
+                _end = _path_text(entry, "ProcurementProject", "PlannedPeriod", "EndDate")
+                if _start and _end:
+                    _dt_start = _parse_datetime(_start)
+                    _dt_end = _parse_datetime(_end)
+                    if _dt_start and _dt_end and _dt_end > _dt_start:
+                        duration_months = max(1, round((_dt_end - _dt_start).days / 30.44))
+
             buyer_type = _normalise_buyer_type(
-                _find_first_text_by_localname(entry, ["ContractingPartyTypeCode", "PartyTypeCode"])
+                _path_text(entry, "ContractingParty", "ContractingPartyType", "PartyTypeCode")
+                or _find_first_text_by_localname(entry, ["ContractingPartyTypeCode", "PartyTypeCode"])
+                or ""
+            )
+
+            # Status: ContractFolderStatusCode (PUB, EV, ADJ, RES, FOR, AN, …)
+            status = (
+                _path_text(entry, "ContractFolderStatus", "ContractFolderStatusCode")
+                or _find_first_text(entry, "ContractFolderStatusCode")
             )
 
             tenders.append(
@@ -278,6 +331,8 @@ class PlacspClient:
                     lot_count=lot_count,
                     duration_months=duration_months,
                     buyer_type=buyer_type,
+                    status=status,
+                    cpv_codes=cpv_codes,
                 )
             )
 
@@ -308,6 +363,8 @@ class PlacspClient:
                     lot_count=_parse_int(item.get("lot_count")),
                     duration_months=_parse_int(item.get("duration_months")),
                     buyer_type=item.get("buyer_type"),
+                    status=item.get("status"),
+                    cpv_codes=list(item.get("cpv_codes") or []),
                 )
             )
         return tenders
@@ -347,6 +404,83 @@ def _find_first_text_by_localname(node: ET.Element, local_names: Iterable[str]) 
             if value:
                 return value
     return ""
+
+
+# ── Structured path-walking helpers ──────────────────────────────────────────
+# These check only direct children at each step, avoiding false matches from
+# deeply-nested elements that share a tag name.
+
+def _path(node: ET.Element, *localnames: str) -> Optional[ET.Element]:
+    """Walk node → child₁ → child₂ → … by localname (direct children only)."""
+    current: ET.Element = node
+    for name in localnames:
+        name_lower = name.lower()
+        current = next(
+            (c for c in current if _localname(c.tag).lower() == name_lower),
+            None,
+        )
+        if current is None:
+            return None
+    return current
+
+
+def _path_text(node: ET.Element, *localnames: str) -> Optional[str]:
+    el = _path(node, *localnames)
+    if el is not None and el.text and el.text.strip():
+        return el.text.strip()
+    return None
+
+
+def _find_all_by_localname(node: ET.Element, local_name: str) -> List[ET.Element]:
+    """Return every element in the subtree whose localname matches (case-insensitive)."""
+    key = local_name.lower()
+    return [el for el in node.iter() if _localname(el.tag).lower() == key]
+
+
+def _find_first_text(node: ET.Element, *local_names: str) -> Optional[str]:
+    """Flat tree search: return the first non-empty text matching any localname."""
+    wanted = {n.lower() for n in local_names}
+    for el in node.iter():
+        if _localname(el.tag).lower() in wanted:
+            value = _text(el)
+            if value:
+                return value
+    return None
+
+
+def _extract_all_cpv_codes(entry: ET.Element) -> List[str]:
+    """Return all CPV codes from a tender entry, deduplicated and in order.
+
+    Primary: ProcurementProject → RequiredCommodityClassification → ItemClassificationCode
+    Flat fallback: any ItemClassificationCode / CPV / CPVCode element.
+    """
+    codes: List[str] = []
+    seen: set = set()
+
+    # Structured path: multiple RequiredCommodityClassification blocks are common
+    for proj in _find_all_by_localname(entry, "ProcurementProject"):
+        for classif in _find_all_by_localname(proj, "RequiredCommodityClassification"):
+            for el in _find_all_by_localname(classif, "ItemClassificationCode"):
+                code = _text(el)
+                if code and code not in seen:
+                    codes.append(code)
+                    seen.add(code)
+
+    if not codes:
+        # Flat fallback for entries that don't follow the structured path
+        for el in _find_all_by_localname(entry, "ItemClassificationCode"):
+            code = _text(el)
+            if code and code not in seen:
+                codes.append(code)
+                seen.add(code)
+        for tag in ("CPV", "CPVCode"):
+            for el in _find_all_by_localname(entry, tag):
+                code = _text(el)
+                if code and code not in seen:
+                    codes.append(code)
+                    seen.add(code)
+
+    return codes
 
 
 def _parse_datetime(value: str) -> Optional[datetime]:

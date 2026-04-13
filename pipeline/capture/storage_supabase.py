@@ -38,6 +38,8 @@ class SupabaseRawTenderRepository:
                 "lot_count": t.lot_count,
                 "duration_months": t.duration_months,
                 "buyer_type": t.buyer_type,
+                "status": t.status,
+                "cpv_codes": t.cpv_codes,
             }
             for t in tenders
         ]

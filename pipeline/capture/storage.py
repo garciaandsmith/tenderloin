@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -47,6 +48,8 @@ class RawTenderRepository:
                 ("lot_count", "INTEGER"),
                 ("duration_months", "INTEGER"),
                 ("buyer_type", "TEXT"),
+                ("status", "TEXT"),
+                ("cpv_codes", "TEXT"),
             ]:
                 try:
                     conn.execute(f"ALTER TABLE tenders_raw ADD COLUMN {col} {coltype}")
@@ -73,6 +76,8 @@ class RawTenderRepository:
                 item.lot_count,
                 item.duration_months,
                 item.buyer_type,
+                item.status,
+                json.dumps(item.cpv_codes),
             )
             for item in tenders
         ]
@@ -100,8 +105,10 @@ class RawTenderRepository:
                     procedure_type,
                     lot_count,
                     duration_months,
-                    buyer_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    buyer_type,
+                    status,
+                    cpv_codes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 
 @dataclass(slots=True)
@@ -25,3 +25,5 @@ class TenderRaw:
     lot_count: Optional[int] = None
     duration_months: Optional[int] = None
     buyer_type: Optional[str] = None
+    status: Optional[str] = None
+    cpv_codes: List[str] = field(default_factory=list)

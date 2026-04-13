@@ -105,12 +105,14 @@ create table public.tenders_raw (
   lot_count       integer,
   duration_months integer,
   buyer_type      text,
+  cpv_codes       text[] not null default '{}',       -- all CPV codes (primary kept in cpv)
   unique (external_id, source)
 );
 
 create index tenders_raw_published_at_idx on public.tenders_raw (published_at desc);
 create index tenders_raw_deadline_at_idx  on public.tenders_raw (deadline_at);
 create index tenders_raw_cpv_idx          on public.tenders_raw (cpv);
+create index tenders_raw_cpv_codes_idx    on public.tenders_raw using gin (cpv_codes);
 create index tenders_raw_region_idx       on public.tenders_raw (region);
 
 -- ─────────────────────────────────────────────────────────────

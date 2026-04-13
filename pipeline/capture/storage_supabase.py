@@ -18,7 +18,7 @@ class SupabaseRawTenderRepository:
 
         self._client = create_client(supabase_url, service_role_key)
 
-    def upsert_many(self, tenders: Iterable[TenderRaw], captured_at: datetime) -> int:
+    def upsert_many(self, tenders: Iterable[TenderRaw], captured_at: datetime, *, force_update: bool = False) -> int:
         rows = [
             {
                 "external_id": t.external_id,
@@ -52,7 +52,7 @@ class SupabaseRawTenderRepository:
             chunk = rows[i : i + 500]
             response = (
                 self._client.table("tenders_raw")
-                .upsert(chunk, on_conflict="external_id,source", ignore_duplicates=True)
+                .upsert(chunk, on_conflict="external_id,source", ignore_duplicates=not force_update)
                 .execute()
             )
             inserted += len(response.data) if response.data else 0

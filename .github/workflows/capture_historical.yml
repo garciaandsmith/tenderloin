@@ -1,0 +1,61 @@
+name: Re-capture Historical Tenders
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_month:
+        description: 'Start month in YYYY-MM format (e.g. 2024-01)'
+        required: false
+        default: ''
+      end_month:
+        description: 'End month in YYYY-MM format (e.g. 2026-04). Defaults to current month.'
+        required: false
+        default: ''
+
+jobs:
+  capture_historical:
+    name: Bulk re-capture historical PLACSP ZIPs into tenders_raw
+    runs-on: ubuntu-latest
+    # Wide date ranges can take a long time
+    timeout-minutes: 360
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          if [ -f pipeline/requirements.txt ]; then pip install -r pipeline/requirements.txt; fi
+
+      - name: Build date-range args
+        id: args
+        run: |
+          START_MONTH="${{ github.event.inputs.start_month }}"
+          END_MONTH="${{ github.event.inputs.end_month }}"
+
+          if [ -n "$START_MONTH" ]; then
+            CMD="--start $START_MONTH"
+          else
+            CMD="--start 2022-01"
+          fi
+
+          if [ -n "$END_MONTH" ]; then
+            CMD="$CMD --end $END_MONTH"
+          fi
+
+          echo "cmd=$CMD" >> "$GITHUB_OUTPUT"
+
+      - name: Re-capture historical tenders into tenders_raw
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m pipeline.run_capture_historical ${{ steps.args.outputs.cmd }}

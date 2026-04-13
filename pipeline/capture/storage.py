@@ -56,7 +56,7 @@ class RawTenderRepository:
                 except sqlite3.OperationalError:
                     pass  # column already exists
 
-    def upsert_many(self, tenders: Iterable[TenderRaw], captured_at: datetime) -> int:
+    def upsert_many(self, tenders: Iterable[TenderRaw], captured_at: datetime, *, force_update: bool = False) -> int:
         rows = [
             (
                 item.external_id,
@@ -86,9 +86,10 @@ class RawTenderRepository:
 
         with self._connect() as conn:
             before = conn.total_changes
+            insert_verb = "INSERT OR REPLACE" if force_update else "INSERT OR IGNORE"
             conn.executemany(
-                """
-                INSERT OR IGNORE INTO tenders_raw (
+                f"""
+                {insert_verb} INTO tenders_raw (
                     external_id,
                     title,
                     summary,

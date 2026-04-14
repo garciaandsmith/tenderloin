@@ -8,12 +8,21 @@ import { CPV_FILTER_CATEGORIES } from "@/lib/utils/cpv";
 
 interface Props {
   q?: string;
+  source?: string;
   contractType?: string;
+  procedureType?: string;
+  buyerType?: string;
   region?: string;
   cpv?: string;
   status?: string;
   budgetMin?: string;
   budgetMax?: string;
+  lotCountMin?: string;
+  lotCountMax?: string;
+  durationMin?: string;
+  durationMax?: string;
+  publishedFrom?: string;
+  publishedTo?: string;
   perPage?: number;
 }
 
@@ -33,18 +42,27 @@ const STATUS_OPTIONS = [
 
 export default function PipelineSearch({
   q,
+  source,
   contractType,
+  procedureType,
+  buyerType,
   region,
   cpv,
   status = "active",
   budgetMin,
   budgetMax,
+  lotCountMin,
+  lotCountMax,
+  durationMin,
+  durationMax,
+  publishedFrom,
+  publishedTo,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [showFilters, setShowFilters] = useState(
-    !!(contractType || region || cpv || budgetMin || budgetMax)
+    !!(contractType || region || cpv || budgetMin || budgetMax || source || procedureType || buyerType || lotCountMin || lotCountMax || durationMin || durationMax || publishedFrom || publishedTo)
   );
 
   const updateSearch = useCallback(
@@ -63,7 +81,36 @@ export default function PipelineSearch({
     [searchParams, router, pathname]
   );
 
-  const hasFilters = q || contractType || region || cpv || budgetMin || budgetMax || (status && status !== "active");
+  const activeFilterCount = [
+    contractType,
+    region,
+    cpv,
+    budgetMin || budgetMax,
+    source,
+    procedureType,
+    buyerType,
+    lotCountMin || lotCountMax,
+    durationMin || durationMax,
+    publishedFrom || publishedTo,
+  ].filter(Boolean).length;
+
+  const hasFilters =
+    q ||
+    contractType ||
+    region ||
+    cpv ||
+    budgetMin ||
+    budgetMax ||
+    source ||
+    procedureType ||
+    buyerType ||
+    lotCountMin ||
+    lotCountMax ||
+    durationMin ||
+    durationMax ||
+    publishedFrom ||
+    publishedTo ||
+    (status && status !== "active");
 
   return (
     <div className="space-y-3">
@@ -111,16 +158,16 @@ export default function PipelineSearch({
         <button
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-md transition-colors shrink-0 ${
-            showFilters || (hasFilters && hasFilters !== (status !== "active"))
+            showFilters || activeFilterCount > 0
               ? "bg-primary/10 border-primary/30 text-primary"
               : "bg-background text-muted-foreground hover:bg-muted"
           }`}
         >
           <SlidersHorizontal className="h-4 w-4" />
           Filtros
-          {(contractType || region || cpv || budgetMin || budgetMax) && (
+          {activeFilterCount > 0 && (
             <span className="ml-0.5 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-bold w-4 h-4">
-              {[contractType, region, cpv, budgetMin || budgetMax].filter(Boolean).length}
+              {activeFilterCount}
             </span>
           )}
         </button>
@@ -237,6 +284,152 @@ export default function PipelineSearch({
                     updateSearch({ budget_max: (e.target as HTMLInputElement).value });
                   }
                 }}
+              />
+            </div>
+          </div>
+
+          {/* Source */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Fuente
+            </label>
+            <input
+              type="text"
+              placeholder="Ej. PLACSP"
+              defaultValue={source ?? ""}
+              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              onBlur={(e) => updateSearch({ source: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  updateSearch({ source: (e.target as HTMLInputElement).value });
+                }
+              }}
+            />
+          </div>
+
+          {/* Procedure type */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Procedimiento
+            </label>
+            <input
+              type="text"
+              placeholder="Ej. abierto"
+              defaultValue={procedureType ?? ""}
+              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              onBlur={(e) => updateSearch({ procedure_type: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  updateSearch({ procedure_type: (e.target as HTMLInputElement).value });
+                }
+              }}
+            />
+          </div>
+
+          {/* Buyer type */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Tipo organismo
+            </label>
+            <input
+              type="text"
+              placeholder="Ej. ayuntamiento"
+              defaultValue={buyerType ?? ""}
+              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              onBlur={(e) => updateSearch({ buyer_type: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  updateSearch({ buyer_type: (e.target as HTMLInputElement).value });
+                }
+              }}
+            />
+          </div>
+
+          {/* Lot count range */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Lotes
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                placeholder="Mín."
+                defaultValue={lotCountMin ?? ""}
+                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                onBlur={(e) => updateSearch({ lot_count_min: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    updateSearch({ lot_count_min: (e.target as HTMLInputElement).value });
+                  }
+                }}
+              />
+              <input
+                type="number"
+                placeholder="Máx."
+                defaultValue={lotCountMax ?? ""}
+                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                onBlur={(e) => updateSearch({ lot_count_max: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    updateSearch({ lot_count_max: (e.target as HTMLInputElement).value });
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Duration range */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Duración (meses)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                placeholder="Mín."
+                defaultValue={durationMin ?? ""}
+                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                onBlur={(e) => updateSearch({ duration_min: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    updateSearch({ duration_min: (e.target as HTMLInputElement).value });
+                  }
+                }}
+              />
+              <input
+                type="number"
+                placeholder="Máx."
+                defaultValue={durationMax ?? ""}
+                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                onBlur={(e) => updateSearch({ duration_max: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    updateSearch({ duration_max: (e.target as HTMLInputElement).value });
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Published date range */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Publicado (rango)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                defaultValue={publishedFrom ?? ""}
+                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                onBlur={(e) => updateSearch({ published_from: e.target.value })}
+                onChange={(e) => updateSearch({ published_from: e.target.value })}
+              />
+              <input
+                type="date"
+                defaultValue={publishedTo ?? ""}
+                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                onBlur={(e) => updateSearch({ published_to: e.target.value })}
+                onChange={(e) => updateSearch({ published_to: e.target.value })}
               />
             </div>
           </div>

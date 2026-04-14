@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/utils/formatters";
-import { RefreshCw, History, Clock, CalendarRange, Loader2 } from "lucide-react";
+import { RefreshCw, History, Clock, CalendarRange } from "lucide-react";
 
 interface Props {
   lastRunAt: string | null;
@@ -31,73 +30,13 @@ const YEARS = Array.from({ length: currentYear - 2018 }, (_, i) =>
   String(currentYear - i)
 );
 
-function toYYYYMM(year: string, month: string): string {
-  return `${year}-${month.padStart(2, "0")}`;
-}
-
 export default function IngestionLoaderPanel({ lastRunAt }: Props) {
-  const router = useRouter();
   const [mode, setMode] = useState<Mode>("fresh");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const [fromYear, setFromYear] = useState(String(currentYear - 1));
   const [fromMonth, setFromMonth] = useState("1");
   const [toYear, setToYear] = useState(String(currentYear));
   const [toMonth, setToMonth] = useState(String(new Date().getMonth() + 1));
-
-  async function handleFresh() {
-    setLoading(true);
-    setMessage(null);
-    try {
-      const res = await fetch("/api/admin/ingestion/trigger", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage({ type: "error", text: data.error ?? "Failed to trigger ingestion" });
-      } else {
-        setMessage({ type: "success", text: "Ingestion workflow triggered. Results will appear shortly." });
-        router.refresh();
-      }
-    } catch {
-      setMessage({ type: "error", text: "Network error — could not reach server" });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleHistorical() {
-    const startMonth = toYYYYMM(fromYear, fromMonth);
-    const endMonth = toYYYYMM(toYear, toMonth);
-
-    if (startMonth > endMonth) {
-      setMessage({ type: "error", text: "Start month must be before or equal to end month" });
-      return;
-    }
-
-    setLoading(true);
-    setMessage(null);
-    try {
-      const res = await fetch("/api/admin/ingestion/historical", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startMonth, endMonth }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage({ type: "error", text: data.error ?? "Failed to trigger historical ingestion" });
-      } else {
-        setMessage({
-          type: "success",
-          text: `Historical workflow triggered for ${startMonth} → ${endMonth}. This may take several minutes.`,
-        });
-        router.refresh();
-      }
-    } catch {
-      setMessage({ type: "error", text: "Network error — could not reach server" });
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <div className="rounded-lg border bg-card p-4 space-y-4">
@@ -106,12 +45,15 @@ export default function IngestionLoaderPanel({ lastRunAt }: Props) {
         <div className="flex items-center gap-2">
           <RefreshCw className="h-4 w-4 text-muted-foreground" />
           <span className="font-semibold text-sm">Data Loader</span>
+          <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5 font-medium">
+            Coming soon
+          </span>
         </div>
 
         {/* Mode toggle */}
         <div className="flex rounded-md border overflow-hidden text-sm">
           <button
-            onClick={() => { setMode("fresh"); setMessage(null); }}
+            onClick={() => setMode("fresh")}
             className={`flex items-center gap-1.5 px-3 py-1.5 font-medium transition-colors ${
               mode === "fresh"
                 ? "bg-primary text-primary-foreground"
@@ -122,7 +64,7 @@ export default function IngestionLoaderPanel({ lastRunAt }: Props) {
             Fresh Data
           </button>
           <button
-            onClick={() => { setMode("historical"); setMessage(null); }}
+            onClick={() => setMode("historical")}
             className={`flex items-center gap-1.5 px-3 py-1.5 font-medium transition-colors ${
               mode === "historical"
                 ? "bg-primary text-primary-foreground"
@@ -134,19 +76,6 @@ export default function IngestionLoaderPanel({ lastRunAt }: Props) {
           </button>
         </div>
       </div>
-
-      {/* Status message */}
-      {message && (
-        <p
-          className={`text-sm px-3 py-2 rounded-md ${
-            message.type === "success"
-              ? "bg-green-50 text-green-800 border border-green-200"
-              : "bg-red-50 text-red-800 border border-red-200"
-          }`}
-        >
-          {message.text}
-        </p>
-      )}
 
       {/* Fresh mode */}
       {mode === "fresh" && (
@@ -164,16 +93,12 @@ export default function IngestionLoaderPanel({ lastRunAt }: Props) {
             </div>
           </div>
           <button
-            onClick={handleFresh}
-            disabled={loading}
-            className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled
+            title="Ingestion backend not yet connected"
+            className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-muted text-muted-foreground border border-dashed cursor-not-allowed"
           >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            {loading ? "Triggering…" : "Capture Now"}
+            <RefreshCw className="h-4 w-4" />
+            Capture Now
           </button>
         </div>
       )}
@@ -184,8 +109,7 @@ export default function IngestionLoaderPanel({ lastRunAt }: Props) {
           <div className="flex-1 space-y-3">
             <p className="text-sm text-muted-foreground">
               Load tenders from a specific date range by downloading monthly
-              data packages. Existing records are updated only if a newer
-              version is available.
+              data packages. Existing records are not overwritten.
             </p>
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1">
@@ -255,16 +179,12 @@ export default function IngestionLoaderPanel({ lastRunAt }: Props) {
           </div>
 
           <button
-            onClick={handleHistorical}
-            disabled={loading}
-            className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled
+            title="Ingestion backend not yet connected"
+            className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-muted text-muted-foreground border border-dashed cursor-not-allowed"
           >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <History className="h-4 w-4" />
-            )}
-            {loading ? "Triggering…" : "Load Historical"}
+            <History className="h-4 w-4" />
+            Load Historical
           </button>
         </div>
       )}

@@ -2,32 +2,30 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
-import { Search, X, SlidersHorizontal } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { SPAIN_NUTS_CODES } from "@/lib/utils/nuts";
-import { CPV_FILTER_CATEGORIES } from "@/lib/utils/cpv";
 
-interface Props {
-  q?: string;
-  source?: string;
-  contractType?: string;
-  procedureType?: string;
-  buyerType?: string;
-  region?: string;
-  cpv?: string;
-  status?: string;
-  budgetMin?: string;
-  budgetMax?: string;
-  lotCountMin?: string;
-  lotCountMax?: string;
-  durationMin?: string;
-  durationMax?: string;
-  publishedFrom?: string;
-  publishedTo?: string;
-  perPage?: number;
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface QueryRule {
+  id: string;
+  field: string;
+  op: string;
+  value: string;
 }
 
-const CONTRACT_TYPES = [
-  { value: "", label: "Todos los tipos" },
+type FieldType = "text" | "select" | "number" | "date";
+
+interface FieldDef {
+  key: string;
+  label: string;
+  type: FieldType;
+  options?: Array<{ value: string; label: string }>;
+}
+
+// ─── Field definitions ────────────────────────────────────────────────────────
+
+const CONTRACT_TYPE_OPTIONS = [
   { value: "services", label: "Servicios" },
   { value: "supplies", label: "Suministros" },
   { value: "works", label: "Obras" },
@@ -35,116 +33,219 @@ const CONTRACT_TYPES = [
 ];
 
 const STATUS_OPTIONS = [
+  { value: "PUB", label: "Publicado" },
+  { value: "ADJ", label: "Adjudicado" },
+  { value: "FOR", label: "Formalizado" },
+  { value: "EV", label: "En evaluación" },
+  { value: "AN", label: "Anunciado" },
+];
+
+const REGION_OPTIONS = SPAIN_NUTS_CODES.map((n) => ({ value: n.code, label: n.label }));
+
+const QUERY_FIELDS: FieldDef[] = [
+  { key: "title", label: "Título", type: "text" },
+  { key: "buyer_name", label: "Contratante", type: "text" },
+  { key: "contract_type", label: "Tipo de contrato", type: "select", options: CONTRACT_TYPE_OPTIONS },
+  { key: "status", label: "Estado", type: "select", options: STATUS_OPTIONS },
+  { key: "cpv", label: "CPV (prefijo)", type: "text" },
+  { key: "region", label: "Región", type: "select", options: REGION_OPTIONS },
+  { key: "budget_amount", label: "Presupuesto (€)", type: "number" },
+  { key: "published_at", label: "Fecha publicación", type: "date" },
+  { key: "deadline_at", label: "Plazo", type: "date" },
+  { key: "procedure_type", label: "Procedimiento", type: "text" },
+  { key: "buyer_type", label: "Tipo organismo", type: "text" },
+];
+
+// ─── Operators ────────────────────────────────────────────────────────────────
+
+const TEXT_OPS = [
+  { value: "contains", label: "contiene" },
+  { value: "not_contains", label: "no contiene" },
+  { value: "is", label: "es exactamente" },
+  { value: "is_not", label: "no es" },
+  { value: "starts_with", label: "empieza por" },
+];
+
+const SELECT_OPS = [
+  { value: "is", label: "es" },
+  { value: "is_not", label: "no es" },
+];
+
+const NUMBER_OPS = [
+  { value: "eq", label: "=" },
+  { value: "neq", label: "≠" },
+  { value: "gt", label: ">" },
+  { value: "lt", label: "<" },
+  { value: "gte", label: "≥" },
+  { value: "lte", label: "≤" },
+];
+
+const DATE_OPS = [
+  { value: "eq", label: "es" },
+  { value: "gt", label: "después de" },
+  { value: "lt", label: "antes de" },
+  { value: "gte", label: "en o después de" },
+  { value: "lte", label: "en o antes de" },
+];
+
+function opsForField(field: FieldDef) {
+  switch (field.type) {
+    case "text": return TEXT_OPS;
+    case "select": return SELECT_OPS;
+    case "number": return NUMBER_OPS;
+    case "date": return DATE_OPS;
+  }
+}
+
+function defaultOpForField(field: FieldDef) {
+  return opsForField(field)[0].value;
+}
+
+// ─── Status filter options ────────────────────────────────────────────────────
+
+const DEADLINE_STATUS_OPTIONS = [
   { value: "active", label: "Activas" },
   { value: "inactive", label: "Vencidas" },
   { value: "all", label: "Todas" },
 ];
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+let ruleIdCounter = 0;
+function nextRuleId() {
+  return `r${++ruleIdCounter}`;
+}
+
+// ─── Props ────────────────────────────────────────────────────────────────────
+
+interface Props {
+  filtersJson?: string;
+  logic?: string;
+  statusFilter?: string;
+  perPage?: number;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function PipelineSearch({
-  q,
-  source,
-  contractType,
-  procedureType,
-  buyerType,
-  region,
-  cpv,
-  status = "active",
-  budgetMin,
-  budgetMax,
-  lotCountMin,
-  lotCountMax,
-  durationMin,
-  durationMax,
-  publishedFrom,
-  publishedTo,
+  filtersJson,
+  logic: logicProp = "AND",
+  statusFilter = "active",
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [showFilters, setShowFilters] = useState(
-    !!(contractType || region || cpv || budgetMin || budgetMax || source || procedureType || buyerType || lotCountMin || lotCountMax || durationMin || durationMax || publishedFrom || publishedTo)
-  );
 
-  const updateSearch = useCallback(
-    (updates: Record<string, string>) => {
+  // Parse initial rules from URL
+  function parseRules(): QueryRule[] {
+    if (!filtersJson) return [];
+    try {
+      const parsed = JSON.parse(filtersJson);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(
+        (r): r is QueryRule =>
+          r && typeof r.field === "string" && typeof r.op === "string" && typeof r.value === "string"
+      ).map((r) => ({ ...r, id: nextRuleId() }));
+    } catch {
+      return [];
+    }
+  }
+
+  const [rules, setRules] = useState<QueryRule[]>(parseRules);
+  const [logic, setLogic] = useState<"AND" | "OR">(logicProp === "OR" ? "OR" : "AND");
+
+  const applyFilters = useCallback(
+    (newRules: QueryRule[], newLogic: "AND" | "OR", newStatusFilter: string) => {
       const params = new URLSearchParams(searchParams.toString());
-      Object.entries(updates).forEach(([key, val]) => {
-        if (val) {
-          params.set(key, val);
-        } else {
-          params.delete(key);
-        }
-      });
+
+      // Preserve sort/pagination params, clear filter-specific ones
+      params.delete("filters");
+      params.delete("logic");
+      params.delete("status_filter");
       params.set("page", "1");
+
+      if (newRules.length > 0) {
+        const serializable = newRules.map(({ field, op, value }) => ({ field, op, value }));
+        params.set("filters", JSON.stringify(serializable));
+        if (newLogic === "OR") params.set("logic", "OR");
+      }
+
+      params.set("status_filter", newStatusFilter);
       router.push(`${pathname}?${params.toString()}`);
     },
     [searchParams, router, pathname]
   );
 
-  const activeFilterCount = [
-    contractType,
-    region,
-    cpv,
-    budgetMin || budgetMax,
-    source,
-    procedureType,
-    buyerType,
-    lotCountMin || lotCountMax,
-    durationMin || durationMax,
-    publishedFrom || publishedTo,
-  ].filter(Boolean).length;
+  function addRule() {
+    const firstField = QUERY_FIELDS[0];
+    const newRule: QueryRule = {
+      id: nextRuleId(),
+      field: firstField.key,
+      op: defaultOpForField(firstField),
+      value: "",
+    };
+    setRules((prev) => [...prev, newRule]);
+    // Don't apply yet — user hasn't entered a value
+  }
 
-  const hasFilters =
-    q ||
-    contractType ||
-    region ||
-    cpv ||
-    budgetMin ||
-    budgetMax ||
-    source ||
-    procedureType ||
-    buyerType ||
-    lotCountMin ||
-    lotCountMax ||
-    durationMin ||
-    durationMax ||
-    publishedFrom ||
-    publishedTo ||
-    (status && status !== "active");
+  function removeRule(id: string) {
+    const next = rules.filter((r) => r.id !== id);
+    setRules(next);
+    applyFilters(next, logic, statusFilter);
+  }
+
+  function updateRule(id: string, patch: Partial<QueryRule>) {
+    setRules((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        const updated = { ...r, ...patch };
+        // Reset op when field changes
+        if (patch.field && patch.field !== r.field) {
+          const fieldDef = QUERY_FIELDS.find((f) => f.key === patch.field)!;
+          updated.op = defaultOpForField(fieldDef);
+          updated.value = "";
+        }
+        return updated;
+      })
+    );
+  }
+
+  function commitRule(id: string) {
+    const rule = rules.find((r) => r.id === id);
+    if (!rule || !rule.value.trim()) return;
+    applyFilters(rules, logic, statusFilter);
+  }
+
+  function toggleLogic() {
+    const next: "AND" | "OR" = logic === "AND" ? "OR" : "AND";
+    setLogic(next);
+    if (rules.some((r) => r.value.trim())) {
+      applyFilters(rules, next, statusFilter);
+    }
+  }
+
+  function changeStatusFilter(val: string) {
+    applyFilters(rules, logic, val);
+  }
+
+  function clearAll() {
+    setRules([]);
+    router.push(`${pathname}?status_filter=${statusFilter}`);
+  }
+
+  const hasActiveFilters = rules.some((r) => r.value.trim());
 
   return (
     <div className="space-y-3">
-      {/* Top row: search + status + toggle */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        {/* Search bar */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Buscar por título o contratante…"
-            defaultValue={q ?? ""}
-            className="w-full pl-9 pr-4 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                updateSearch({ q: (e.target as HTMLInputElement).value });
-              }
-            }}
-            onBlur={(e) => {
-              if (e.target.value !== (q ?? "")) {
-                updateSearch({ q: e.target.value });
-              }
-            }}
-          />
-        </div>
-
-        {/* Status toggle */}
+      {/* Top row: deadline status toggle + clear */}
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex rounded-md border overflow-hidden shrink-0">
-          {STATUS_OPTIONS.map((opt) => (
+          {DEADLINE_STATUS_OPTIONS.map((opt) => (
             <button
               key={opt.value}
-              onClick={() => updateSearch({ status: opt.value })}
+              onClick={() => changeStatusFilter(opt.value)}
               className={`px-3 py-2 text-sm font-medium transition-colors ${
-                status === opt.value
+                statusFilter === opt.value
                   ? "bg-primary text-primary-foreground"
                   : "bg-background text-muted-foreground hover:bg-muted"
               }`}
@@ -154,287 +255,180 @@ export default function PipelineSearch({
           ))}
         </div>
 
-        {/* Toggle filters button */}
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-md transition-colors shrink-0 ${
-            showFilters || activeFilterCount > 0
-              ? "bg-primary/10 border-primary/30 text-primary"
-              : "bg-background text-muted-foreground hover:bg-muted"
-          }`}
-        >
-          <SlidersHorizontal className="h-4 w-4" />
-          Filtros
-          {activeFilterCount > 0 && (
-            <span className="ml-0.5 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-bold w-4 h-4">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
-
-        {/* Clear all filters */}
-        {hasFilters && (
+        {hasActiveFilters && (
           <button
-            onClick={() => router.push(pathname)}
-            className="flex items-center gap-1 px-3 py-2 text-sm text-muted-foreground hover:text-foreground border rounded-md transition-colors shrink-0"
+            onClick={clearAll}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm border rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
           >
-            <X className="h-4 w-4" />
-            Limpiar
+            <X className="h-3.5 w-3.5" />
+            Limpiar filtros
           </button>
         )}
       </div>
 
-      {/* Expanded filter panel */}
-      {showFilters && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 border rounded-lg bg-muted/30">
-          {/* Contract type */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Tipo de contrato
-            </label>
-            <select
-              value={contractType ?? ""}
-              onChange={(e) => updateSearch({ contract_type: e.target.value })}
-              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {CONTRACT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* Rules */}
+      {rules.length > 0 && (
+        <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+          {rules.map((rule, idx) => {
+            const fieldDef = QUERY_FIELDS.find((f) => f.key === rule.field) ?? QUERY_FIELDS[0];
+            const ops = opsForField(fieldDef);
 
-          {/* Region */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Región
-            </label>
-            <select
-              value={region ?? ""}
-              onChange={(e) => updateSearch({ region: e.target.value })}
-              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">Todas las regiones</option>
-              <optgroup label="Nacional">
-                <option value="ES">España (todo el territorio)</option>
-              </optgroup>
-              <optgroup label="Comunidades autónomas (NUTS-2)">
-                {SPAIN_NUTS_CODES.filter((n) => n.code.length === 4).map((n) => (
-                  <option key={n.code} value={n.code}>
-                    {n.label}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Provincias (NUTS-3)">
-                {SPAIN_NUTS_CODES.filter((n) => n.code.length === 5).map((n) => (
-                  <option key={n.code} value={n.code}>
-                    {n.label}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-          </div>
+            return (
+              <div key={rule.id} className="space-y-1.5">
+                {/* AND / OR badge between rules */}
+                {idx > 0 && (
+                  <div className="flex items-center gap-2 py-0.5">
+                    <div className="flex-1 h-px bg-border" />
+                    <button
+                      onClick={toggleLogic}
+                      className="px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-background hover:bg-muted transition-colors"
+                    >
+                      {logic}
+                    </button>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                )}
 
-          {/* CPV category */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Categoría CPV
-            </label>
-            <select
-              value={cpv ?? ""}
-              onChange={(e) => updateSearch({ cpv: e.target.value })}
-              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">Todos los CPV</option>
-              {CPV_FILTER_CATEGORIES.map((cat) => (
-                <option key={cat.prefix} value={cat.prefix}>
-                  {cat.prefix}xx — {cat.label}
-                </option>
-              ))}
-            </select>
-          </div>
+                {/* Rule row */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Field selector */}
+                  <select
+                    value={rule.field}
+                    onChange={(e) => updateRule(rule.id, { field: e.target.value })}
+                    className="px-2 py-1.5 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring min-w-[150px]"
+                  >
+                    {QUERY_FIELDS.map((f) => (
+                      <option key={f.key} value={f.key}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
 
-          {/* Budget range */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Presupuesto (€)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                placeholder="Mín."
-                defaultValue={budgetMin ?? ""}
-                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                onBlur={(e) => updateSearch({ budget_min: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    updateSearch({ budget_min: (e.target as HTMLInputElement).value });
-                  }
-                }}
-              />
-              <input
-                type="number"
-                placeholder="Máx."
-                defaultValue={budgetMax ?? ""}
-                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                onBlur={(e) => updateSearch({ budget_max: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    updateSearch({ budget_max: (e.target as HTMLInputElement).value });
-                  }
-                }}
-              />
-            </div>
-          </div>
+                  {/* Operator selector */}
+                  <select
+                    value={rule.op}
+                    onChange={(e) => updateRule(rule.id, { op: e.target.value })}
+                    className="px-2 py-1.5 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring min-w-[130px]"
+                  >
+                    {ops.map((op) => (
+                      <option key={op.value} value={op.value}>
+                        {op.label}
+                      </option>
+                    ))}
+                  </select>
 
-          {/* Source */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Fuente
-            </label>
-            <input
-              type="text"
-              placeholder="Ej. PLACSP"
-              defaultValue={source ?? ""}
-              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-              onBlur={(e) => updateSearch({ source: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  updateSearch({ source: (e.target as HTMLInputElement).value });
-                }
-              }}
-            />
-          </div>
+                  {/* Value input */}
+                  <ValueInput
+                    fieldDef={fieldDef}
+                    value={rule.value}
+                    onChange={(val) => updateRule(rule.id, { value: val })}
+                    onCommit={() => commitRule(rule.id)}
+                  />
 
-          {/* Procedure type */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Procedimiento
-            </label>
-            <input
-              type="text"
-              placeholder="Ej. abierto"
-              defaultValue={procedureType ?? ""}
-              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-              onBlur={(e) => updateSearch({ procedure_type: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  updateSearch({ procedure_type: (e.target as HTMLInputElement).value });
-                }
-              }}
-            />
-          </div>
-
-          {/* Buyer type */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Tipo organismo
-            </label>
-            <input
-              type="text"
-              placeholder="Ej. ayuntamiento"
-              defaultValue={buyerType ?? ""}
-              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-              onBlur={(e) => updateSearch({ buyer_type: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  updateSearch({ buyer_type: (e.target as HTMLInputElement).value });
-                }
-              }}
-            />
-          </div>
-
-          {/* Lot count range */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Lotes
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                placeholder="Mín."
-                defaultValue={lotCountMin ?? ""}
-                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                onBlur={(e) => updateSearch({ lot_count_min: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    updateSearch({ lot_count_min: (e.target as HTMLInputElement).value });
-                  }
-                }}
-              />
-              <input
-                type="number"
-                placeholder="Máx."
-                defaultValue={lotCountMax ?? ""}
-                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                onBlur={(e) => updateSearch({ lot_count_max: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    updateSearch({ lot_count_max: (e.target as HTMLInputElement).value });
-                  }
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Duration range */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Duración (meses)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                placeholder="Mín."
-                defaultValue={durationMin ?? ""}
-                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                onBlur={(e) => updateSearch({ duration_min: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    updateSearch({ duration_min: (e.target as HTMLInputElement).value });
-                  }
-                }}
-              />
-              <input
-                type="number"
-                placeholder="Máx."
-                defaultValue={durationMax ?? ""}
-                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                onBlur={(e) => updateSearch({ duration_max: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    updateSearch({ duration_max: (e.target as HTMLInputElement).value });
-                  }
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Published date range */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Publicado (rango)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="date"
-                defaultValue={publishedFrom ?? ""}
-                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                onBlur={(e) => updateSearch({ published_from: e.target.value })}
-                onChange={(e) => updateSearch({ published_from: e.target.value })}
-              />
-              <input
-                type="date"
-                defaultValue={publishedTo ?? ""}
-                className="w-full px-2 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                onBlur={(e) => updateSearch({ published_to: e.target.value })}
-                onChange={(e) => updateSearch({ published_to: e.target.value })}
-              />
-            </div>
-          </div>
+                  {/* Remove rule */}
+                  <button
+                    onClick={() => removeRule(rule.id)}
+                    className="p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded"
+                    title="Eliminar condición"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
+
+      {/* Add condition button */}
+      <button
+        onClick={addRule}
+        className="flex items-center gap-2 px-3 py-1.5 text-sm border border-dashed rounded-md text-muted-foreground hover:text-foreground hover:bg-muted hover:border-solid transition-colors"
+      >
+        <Plus className="h-4 w-4" />
+        Añadir condición
+      </button>
     </div>
+  );
+}
+
+// ─── Value input ──────────────────────────────────────────────────────────────
+
+function ValueInput({
+  fieldDef,
+  value,
+  onChange,
+  onCommit,
+}: {
+  fieldDef: FieldDef;
+  value: string;
+  onChange: (v: string) => void;
+  onCommit: () => void;
+}) {
+  const baseClass =
+    "px-2 py-1.5 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring min-w-[180px]";
+
+  if (fieldDef.type === "select" && fieldDef.options) {
+    return (
+      <select
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          // Selects commit immediately on change
+          setTimeout(onCommit, 0);
+        }}
+        className={baseClass}
+      >
+        <option value="">Seleccionar…</option>
+        {fieldDef.options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (fieldDef.type === "date") {
+    return (
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onCommit}
+        className={baseClass}
+      />
+    );
+  }
+
+  if (fieldDef.type === "number") {
+    return (
+      <input
+        type="number"
+        value={value}
+        placeholder="Valor…"
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onCommit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onCommit();
+        }}
+        className={baseClass}
+      />
+    );
+  }
+
+  // text (default)
+  return (
+    <input
+      type="text"
+      value={value}
+      placeholder="Valor…"
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onCommit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onCommit();
+      }}
+      className={baseClass}
+    />
   );
 }

@@ -10,24 +10,35 @@ import { cn } from "@/lib/utils";
 export const metadata = { title: "Pipeline — Tenderloin" };
 export const dynamic = "force-dynamic";
 
+// ─── Query rule types ─────────────────────────────────────────────────────────
+
+interface QueryRule {
+  field: string;
+  op: string;
+  value: string;
+}
+
+const VALID_FIELDS = new Set([
+  "title",
+  "buyer_name",
+  "contract_type",
+  "status",
+  "cpv",
+  "region",
+  "budget_amount",
+  "published_at",
+  "deadline_at",
+  "procedure_type",
+  "buyer_type",
+]);
+
+// ─── Props ────────────────────────────────────────────────────────────────────
+
 interface Props {
   searchParams: Promise<{
-    q?: string;
-    source?: string;
-    contract_type?: string;
-    procedure_type?: string;
-    buyer_type?: string;
-    region?: string;
-    cpv?: string;
-    status?: string;
-    budget_min?: string;
-    budget_max?: string;
-    lot_count_min?: string;
-    lot_count_max?: string;
-    duration_min?: string;
-    duration_max?: string;
-    published_from?: string;
-    published_to?: string;
+    filters?: string;
+    logic?: string;
+    status_filter?: string;
     sort?: string;
     sort_dir?: string;
     page?: string;
@@ -35,25 +46,14 @@ interface Props {
   }>;
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default async function PipelinePage({ searchParams }: Props) {
   const params = await searchParams;
   const {
-    q,
-    source,
-    contract_type,
-    procedure_type,
-    buyer_type,
-    region,
-    cpv,
-    status = "active",
-    budget_min,
-    budget_max,
-    lot_count_min,
-    lot_count_max,
-    duration_min,
-    duration_max,
-    published_from,
-    published_to,
+    filters: filtersJson,
+    logic = "AND",
+    status_filter = "active",
     sort = "published_at",
     sort_dir = "desc",
   } = params;
@@ -103,47 +103,107 @@ export default async function PipelinePage({ searchParams }: Props) {
     ? Math.round((now.getTime() - lastRun.getTime()) / (1000 * 60 * 60))
     : null;
 
-  // Build tenders query — fetch all fields for column selector
+  // Parse query builder rules
+  let rules: QueryRule[] = [];
+  if (filtersJson) {
+    try {
+      const parsed = JSON.parse(filtersJson);
+      if (Array.isArray(parsed)) {
+        rules = parsed.filter(
+          (r): r is QueryRule =>
+            r &&
+            typeof r.field === "string" &&
+            typeof r.op === "string" &&
+            typeof r.value === "string" &&
+            VALID_FIELDS.has(r.field) &&
+            r.value.trim() !== ""
+        );
+      }
+    } catch {
+      // ignore malformed JSON
+    }
+  }
+
+  // Build tenders query
   let query = supabase
     .from("tenders_raw")
     .select(
-      "id, external_id, title, summary, link, published_at, deadline_at, buyer_name, region, cpv, budget_amount, source, created_at, contract_type, procedure_type, lot_count, duration_months, buyer_type",
+      "id, external_id, title, summary, link, published_at, deadline_at, buyer_name, region, cpv, cpv_codes, budget_amount, source, status, created_at, contract_type, procedure_type, lot_count, duration_months, buyer_type",
       { count: "exact" }
     );
 
-  // Status filter (active = future deadline, inactive = past deadline)
-  if (status === "active") {
+  // Deadline-based status filter (applied unconditionally)
+  if (status_filter === "active") {
     query = query.gt("deadline_at", now.toISOString());
-  } else if (status === "inactive") {
+  } else if (status_filter === "inactive") {
     query = query.lte("deadline_at", now.toISOString());
   }
-  // "all" → no deadline filter
 
-  // Text search
-  if (q && q.trim()) {
-    const term = `%${q.trim()}%`;
-    query = query.or(`title.ilike.${term},buyer_name.ilike.${term}`);
+  // Apply query builder rules
+  if (rules.length > 0) {
+    if (logic === "OR") {
+      // Build a single .or() string
+      const orParts = rules.map((rule) => {
+        const field = rule.field;
+        const val = rule.value.trim();
+        switch (rule.op) {
+          case "contains":     return `${field}.ilike.%${val}%`;
+          case "not_contains": return `${field}.not.ilike.%${val}%`;
+          case "is":
+          case "eq":           return `${field}.eq.${val}`;
+          case "is_not":
+          case "neq":          return `${field}.neq.${val}`;
+          case "starts_with":  return `${field}.ilike.${val}%`;
+          case "gt":           return `${field}.gt.${val}`;
+          case "lt":           return `${field}.lt.${val}`;
+          case "gte":          return `${field}.gte.${val}`;
+          case "lte":          return `${field}.lte.${val}`;
+          default:             return null;
+        }
+      }).filter(Boolean) as string[];
+
+      if (orParts.length > 0) {
+        query = query.or(orParts.join(","));
+      }
+    } else {
+      // AND: chain filter calls
+      for (const rule of rules) {
+        const field = rule.field as string;
+        const val = rule.value.trim();
+        switch (rule.op) {
+          case "contains":
+            query = query.ilike(field, `%${val}%`);
+            break;
+          case "not_contains":
+            query = query.not(field, "ilike", `%${val}%`);
+            break;
+          case "is":
+          case "eq":
+            query = query.eq(field, val);
+            break;
+          case "is_not":
+          case "neq":
+            query = query.neq(field, val);
+            break;
+          case "starts_with":
+            query = query.ilike(field, `${val}%`);
+            break;
+          case "gt":
+            query = query.gt(field, val);
+            break;
+          case "lt":
+            query = query.lt(field, val);
+            break;
+          case "gte":
+            query = query.gte(field, val);
+            break;
+          case "lte":
+            query = query.lte(field, val);
+            break;
+        }
+      }
+    }
   }
-
-  // Field filters
-  if (source && source.trim()) query = query.ilike("source", `%${source.trim()}%`);
-  if (contract_type) query = query.eq("contract_type", contract_type);
-  if (procedure_type && procedure_type.trim()) query = query.ilike("procedure_type", `%${procedure_type.trim()}%`);
-  if (buyer_type && buyer_type.trim()) query = query.ilike("buyer_type", `%${buyer_type.trim()}%`);
-  if (region) query = query.eq("region", region);
-  if (cpv) query = query.like("cpv", `${cpv}%`);
-
-  // Numeric ranges
-  if (budget_min) query = query.gte("budget_amount", parseFloat(budget_min));
-  if (budget_max) query = query.lte("budget_amount", parseFloat(budget_max));
-  if (lot_count_min) query = query.gte("lot_count", parseInt(lot_count_min, 10));
-  if (lot_count_max) query = query.lte("lot_count", parseInt(lot_count_max, 10));
-  if (duration_min) query = query.gte("duration_months", parseInt(duration_min, 10));
-  if (duration_max) query = query.lte("duration_months", parseInt(duration_max, 10));
-
-  // Date ranges
-  if (published_from) query = query.gte("published_at", published_from);
-  if (published_to) query = query.lte("published_at", `${published_to}T23:59:59`);
 
   // Sorting
   const validSortFields = [
@@ -225,24 +285,11 @@ export default async function PipelinePage({ searchParams }: Props) {
         </div>
       )}
 
-      {/* Search and filters */}
+      {/* Query builder */}
       <PipelineSearch
-        q={q}
-        source={source}
-        contractType={contract_type}
-        procedureType={procedure_type}
-        buyerType={buyer_type}
-        region={region}
-        cpv={cpv}
-        status={status}
-        budgetMin={budget_min}
-        budgetMax={budget_max}
-        lotCountMin={lot_count_min}
-        lotCountMax={lot_count_max}
-        durationMin={duration_min}
-        durationMax={duration_max}
-        publishedFrom={published_from}
-        publishedTo={published_to}
+        filtersJson={filtersJson}
+        logic={logic}
+        statusFilter={status_filter}
         perPage={perPage}
       />
 

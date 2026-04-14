@@ -30,6 +30,8 @@ export interface TenderRow {
   lot_count: number | null;
   duration_months: number | null;
   buyer_type: string | null;
+  cpv_codes: string[];
+  status: string | null;
 }
 
 interface Props {

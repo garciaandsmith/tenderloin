@@ -15,12 +15,10 @@ export type { TenderRow };
 // ─── Column definitions ───────────────────────────────────────────────────────
 
 type ColKey =
-  | "id"
-  | "external_id"
-  | "source"
   | "contract_type"
   | "procedure_type"
   | "cpv"
+  | "cpv_codes"
   | "region"
   | "buyer_type"
   | "budget_amount"
@@ -29,8 +27,7 @@ type ColKey =
   | "published_at"
   | "deadline_at"
   | "created_at"
-  | "summary"
-  | "link";
+  | "status";
 
 interface ColDef {
   key: ColKey;
@@ -42,34 +39,41 @@ interface ColDef {
 }
 
 const COLUMNS: ColDef[] = [
-  { key: "id", label: "ID", sortField: "id", defaultVisible: false, align: "right", width: "60px" },
-  { key: "external_id", label: "ID Externo", defaultVisible: false, width: "160px" },
-  { key: "source", label: "Fuente", defaultVisible: true, width: "90px" },
-  { key: "contract_type", label: "Tipo contrato", defaultVisible: true, width: "110px" },
-  { key: "procedure_type", label: "Procedimiento", defaultVisible: false, width: "130px" },
-  { key: "cpv", label: "CPV", defaultVisible: true, width: "160px" },
-  { key: "region", label: "Región", defaultVisible: true, width: "120px" },
-  { key: "buyer_type", label: "Tipo organismo", defaultVisible: false, width: "130px" },
-  { key: "budget_amount", label: "Presupuesto", sortField: "budget_amount", defaultVisible: true, align: "right", width: "110px" },
-  { key: "lot_count", label: "Lotes", sortField: "lot_count", defaultVisible: false, align: "right", width: "60px" },
-  { key: "duration_months", label: "Duración (m)", sortField: "duration_months", defaultVisible: false, align: "right", width: "100px" },
-  { key: "published_at", label: "Publicado", sortField: "published_at", defaultVisible: true, align: "right", width: "110px" },
-  { key: "deadline_at", label: "Plazo", sortField: "deadline_at", defaultVisible: true, align: "right", width: "110px" },
-  { key: "created_at", label: "Capturado", sortField: "created_at", defaultVisible: false, align: "right", width: "110px" },
-  { key: "summary", label: "Resumen", defaultVisible: false, width: "200px" },
-  { key: "link", label: "Enlace", defaultVisible: true, width: "50px" },
+  { key: "cpv_codes",       label: "CPV",            defaultVisible: true,  width: "240px" },
+  { key: "region",          label: "Región",         defaultVisible: true,  width: "160px" },
+  { key: "status",          label: "Estado",         defaultVisible: true,  width: "110px" },
+  { key: "created_at",      label: "Creado",         sortField: "created_at",   defaultVisible: true,  align: "right", width: "110px" },
+  { key: "deadline_at",     label: "Plazo",          sortField: "deadline_at",  defaultVisible: false, align: "right", width: "110px" },
+  { key: "contract_type",   label: "Tipo contrato",  defaultVisible: false, width: "110px" },
+  { key: "procedure_type",  label: "Procedimiento",  defaultVisible: false, width: "130px" },
+  { key: "cpv",             label: "CPV (código)",   defaultVisible: false, width: "160px" },
+  { key: "buyer_type",      label: "Tipo organismo", defaultVisible: false, width: "130px" },
+  { key: "budget_amount",   label: "Presupuesto",    sortField: "budget_amount",    defaultVisible: false, align: "right", width: "110px" },
+  { key: "lot_count",       label: "Lotes",          sortField: "lot_count",        defaultVisible: false, align: "right", width: "60px" },
+  { key: "duration_months", label: "Duración (m)",   sortField: "duration_months",  defaultVisible: false, align: "right", width: "100px" },
+  { key: "published_at",    label: "Publicado",      sortField: "published_at",     defaultVisible: false, align: "right", width: "110px" },
 ];
 
 const DEFAULT_VISIBLE = new Set<ColKey>(
   COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key)
 );
 
+// ─── Status labels ────────────────────────────────────────────────────────────
+
+const PROCUREMENT_STATUS_LABELS: Record<string, { label: string; className: string }> = {
+  PUB: { label: "Publicado",     className: "bg-blue-100 text-blue-800" },
+  ADJ: { label: "Adjudicado",    className: "bg-green-100 text-green-800" },
+  FOR: { label: "Formalizado",   className: "bg-emerald-100 text-emerald-800" },
+  EV:  { label: "En evaluación", className: "bg-amber-100 text-amber-800" },
+  AN:  { label: "Anunciado",     className: "bg-purple-100 text-purple-800" },
+};
+
 // ─── Contract type labels ─────────────────────────────────────────────────────
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
-  services: "Servicios",
-  supplies: "Suministros",
-  works: "Obras",
+  services:   "Servicios",
+  supplies:   "Suministros",
+  works:      "Obras",
   concession: "Concesión",
 };
 
@@ -200,86 +204,98 @@ export default function PipelineTable({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-lg border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                {/* Fixed: Title / Buyer */}
+      {/* Table — overflow-x-auto on the outer border container enables horizontal scroll
+          while the rounded border still clips properly */}
+      <div className="rounded-lg border overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              {/* Fixed: Title / Buyer */}
+              <th
+                className="px-4 py-2.5 text-left sticky left-0 bg-muted/50 z-10 min-w-[320px] whitespace-nowrap"
+                style={{ boxShadow: "2px 0 4px -2px rgba(0,0,0,0.08)" }}
+              >
+                Licitación / Contratante
+              </th>
+
+              {activeCols.map((col) => (
                 <th
-                  className="px-4 py-2.5 text-left sticky left-0 bg-muted/50 z-10 min-w-[260px] whitespace-nowrap"
-                  style={{ boxShadow: "2px 0 4px -2px rgba(0,0,0,0.08)" }}
+                  key={col.key}
+                  className={cn(
+                    "px-3 py-2.5 whitespace-nowrap",
+                    col.align === "right" ? "text-right" : "text-left"
+                  )}
+                  style={{ minWidth: col.width }}
                 >
-                  Licitación / Contratante
+                  {col.sortField ? (
+                    <PipelineSortHeader
+                      label={col.label}
+                      field={col.sortField}
+                      currentSort={currentSort}
+                      currentDir={currentDir}
+                      className={col.align === "right" ? "justify-end" : ""}
+                    />
+                  ) : (
+                    col.label
+                  )}
                 </th>
+              ))}
+            </tr>
+          </thead>
 
-                {activeCols.map((col) => (
-                  <th
-                    key={col.key}
-                    className={cn(
-                      "px-3 py-2.5 whitespace-nowrap",
-                      col.align === "right" ? "text-right" : "text-left"
-                    )}
-                    style={{ minWidth: col.width }}
+          <tbody>
+            {tenders.map((tender) => {
+              const deadline = daysUntil(tender.deadline_at);
+              return (
+                <tr
+                  key={tender.id}
+                  className="border-b last:border-b-0 hover:bg-muted/40 transition-colors"
+                >
+                  {/* Fixed: Title / Buyer / Link */}
+                  <td
+                    className="px-4 py-3 sticky left-0 bg-background hover:bg-muted/40 z-10 min-w-[320px]"
+                    style={{ boxShadow: "2px 0 4px -2px rgba(0,0,0,0.08)" }}
                   >
-                    {col.sortField ? (
-                      <PipelineSortHeader
-                        label={col.label}
-                        field={col.sortField}
-                        currentSort={currentSort}
-                        currentDir={currentDir}
-                        className={col.align === "right" ? "justify-end" : ""}
-                      />
-                    ) : (
-                      col.label
-                    )}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {tenders.map((tender) => {
-                const deadline = daysUntil(tender.deadline_at);
-                return (
-                  <tr
-                    key={tender.id}
-                    className="border-b last:border-b-0 hover:bg-muted/40 transition-colors"
-                  >
-                    {/* Fixed: Title / Buyer */}
-                    <td
-                      className="px-4 py-3 sticky left-0 bg-background hover:bg-muted/40 z-10 min-w-[260px]"
-                      style={{ boxShadow: "2px 0 4px -2px rgba(0,0,0,0.08)" }}
-                    >
+                    <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="font-medium leading-snug line-clamp-2 max-w-[340px]">
+                        <p className="font-medium leading-snug">
                           {tender.title ?? "—"}
                         </p>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5 max-w-[340px]">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {tender.buyer_name ?? "—"}
                         </p>
                       </div>
-                    </td>
+                      {tender.link && (
+                        <a
+                          href={tender.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 text-muted-foreground hover:text-primary transition-colors mt-0.5"
+                          title="Ver licitación oficial"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </td>
 
-                    {activeCols.map((col) => (
-                      <td
-                        key={col.key}
-                        className={cn(
-                          "px-3 py-3 text-xs text-muted-foreground whitespace-nowrap",
-                          col.align === "right" && "text-right"
-                        )}
-                        style={{ minWidth: col.width }}
-                      >
-                        <CellValue col={col} tender={tender} deadline={deadline} />
-                      </td>
-                    ))}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                  {activeCols.map((col) => (
+                    <td
+                      key={col.key}
+                      className={cn(
+                        "px-3 py-3 text-xs text-muted-foreground whitespace-nowrap",
+                        col.align === "right" && "text-right"
+                      )}
+                      style={{ minWidth: col.width }}
+                    >
+                      <CellValue col={col} tender={tender} deadline={deadline} />
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       {/* Pagination */}
@@ -306,20 +322,60 @@ function CellValue({
   deadline: ReturnType<typeof daysUntil>;
 }) {
   switch (col.key) {
-    case "id":
-      return <span className="font-mono">{tender.id}</span>;
-
-    case "external_id":
+    case "cpv_codes": {
+      const codes = tender.cpv_codes ?? [];
+      if (codes.length === 0) return <span className="text-muted-foreground/50">—</span>;
+      const labels = codes.map((c) => cpvLabelOnly(c) || c);
+      const display = labels.join(" · ");
       return (
-        <span className="font-mono truncate block max-w-[150px]" title={tender.external_id ?? ""}>
-          {tender.external_id ?? "—"}
+        <span className="block max-w-[230px] truncate" title={display}>
+          {display}
+        </span>
+      );
+    }
+
+    case "status": {
+      const s = tender.status;
+      if (!s) return <span className="text-muted-foreground/50">—</span>;
+      const info = PROCUREMENT_STATUS_LABELS[s];
+      return (
+        <span
+          className={cn(
+            "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium",
+            info ? info.className : "bg-muted text-muted-foreground"
+          )}
+        >
+          {info ? info.label : s}
+        </span>
+      );
+    }
+
+    case "region":
+      return (
+        <span>
+          {nutsLabel(tender.region ?? "") || tender.region || "—"}
         </span>
       );
 
-    case "source":
+    case "created_at":
       return (
-        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] bg-muted font-medium uppercase tracking-wide">
-          {tender.source ?? "—"}
+        <span className="font-mono">
+          {tender.created_at ? tender.created_at.slice(0, 10) : "—"}
+        </span>
+      );
+
+    case "deadline_at":
+      return (
+        <span
+          className={cn(
+            deadline.expired
+              ? "text-destructive"
+              : deadline.urgent
+              ? "text-amber-600"
+              : ""
+          )}
+        >
+          {formatDate(tender.deadline_at)}
         </span>
       );
 
@@ -343,13 +399,6 @@ function CellValue({
       return (
         <span className="truncate block max-w-[150px]" title={tender.cpv ?? ""}>
           {cpvLabelOnly(tender.cpv ?? "") || tender.cpv || "—"}
-        </span>
-      );
-
-    case "region":
-      return (
-        <span>
-          {nutsLabel(tender.region ?? "") || tender.region || "—"}
         </span>
       );
 
@@ -379,49 +428,6 @@ function CellValue({
 
     case "published_at":
       return <span>{formatDate(tender.published_at)}</span>;
-
-    case "deadline_at":
-      return (
-        <span
-          className={cn(
-            deadline.expired
-              ? "text-destructive"
-              : deadline.urgent
-              ? "text-amber-600"
-              : ""
-          )}
-        >
-          {formatDate(tender.deadline_at)}
-        </span>
-      );
-
-    case "created_at":
-      return <span>{formatDate(tender.created_at)}</span>;
-
-    case "summary":
-      return (
-        <span
-          className="line-clamp-1 block max-w-[190px] text-muted-foreground"
-          title={tender.summary ?? ""}
-        >
-          {tender.summary ?? "—"}
-        </span>
-      );
-
-    case "link":
-      return tender.link ? (
-        <a
-          href={tender.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-muted-foreground hover:text-primary transition-colors"
-          title="Ver en PLACSP"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-        </a>
-      ) : (
-        <span className="text-muted-foreground/50">—</span>
-      );
 
     default:
       return null;

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Layers, Users, FolderOpen, LayoutGrid, Database } from "lucide-react";
+import { Layers, Users, FolderOpen, LayoutGrid } from "lucide-react";
 import type { Profile } from "@/lib/types/app.types";
 
 interface Props {
@@ -70,12 +70,6 @@ export default function Sidebar({ profile, projects }: Props) {
               label="Proyectos"
               icon={<LayoutGrid className="h-4 w-4" />}
               active={pathname.startsWith("/admin/projects")}
-            />
-            <SidebarLink
-              href="/admin/ingestion"
-              label="Ingestion"
-              icon={<Database className="h-4 w-4" />}
-              active={pathname.startsWith("/admin/ingestion")}
             />
           </>
         )}

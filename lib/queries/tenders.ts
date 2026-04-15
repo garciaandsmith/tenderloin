@@ -40,13 +40,12 @@ export async function getInboxTenders(projectId: string): Promise<InboxTender[]>
   );
 
   // Step 2 — Fetch active tender rows (no embedded joins).
-  // Use status to determine active tenders: PUB = open for bids.
-  // status IS NULL covers legacy rows captured before status extraction was added.
+  // A tender is active if its deadline hasn't passed OR its status is PUB.
   const { data, error } = await supabase
     .from("tenders_raw")
     .select("*")
     .in("id", filteredIds)
-    .or("status.eq.PUB,status.is.null")
+    .or(`deadline_at.gt.${now},status.eq.PUB`)
     .order("published_at", { ascending: false })
     .limit(500);
 

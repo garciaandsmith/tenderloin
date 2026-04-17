@@ -107,6 +107,8 @@ create table public.tenders_raw (
   duration_months integer,
   buyer_type      text,
   cpv_codes       text[] not null default '{}',       -- all CPV codes (primary kept in cpv)
+  region_label    text,                               -- human-readable region name (set by run_enrich)
+  cpv_label       text,                               -- human-readable CPV description (set by run_enrich)
   unique (external_id, source)
 );
 

@@ -109,7 +109,7 @@ def main() -> None:
         "capture_result",
         {
             "fetched": result.fetched,
-            "inserted": result.inserted,
+            "upserted": result.upserted,
             "previous_last_run_at": result.last_run_at.isoformat() if result.last_run_at else None,
             "effective_since": result.effective_since.isoformat() if result.effective_since else None,
             "new_last_run_at": result.new_last_run_at.isoformat(),

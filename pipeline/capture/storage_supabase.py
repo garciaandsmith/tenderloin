@@ -18,7 +18,7 @@ class SupabaseRawTenderRepository:
 
         self._client = create_client(supabase_url, service_role_key)
 
-    def upsert_many(self, tenders: Iterable[TenderRaw], captured_at: datetime, *, force_update: bool = False) -> int:
+    def upsert_many(self, tenders: Iterable[TenderRaw], captured_at: datetime) -> int:
         rows = [
             {
                 "external_id": t.external_id,
@@ -32,7 +32,9 @@ class SupabaseRawTenderRepository:
                 "cpv": t.cpv,
                 "budget_amount": t.budget_amount,
                 "source": t.source,
-                "created_at": captured_at.isoformat(),
+                # created_at is intentionally excluded: new rows get the DB column default (now());
+                # existing rows are not touched, preserving the original capture timestamp.
+                "updated_at": captured_at.isoformat(),
                 "contract_type": t.contract_type,
                 "procedure_type": t.procedure_type,
                 "lot_count": t.lot_count,
@@ -46,14 +48,14 @@ class SupabaseRawTenderRepository:
         if not rows:
             return 0
 
-        # Batch insert in chunks of 500 to stay within Supabase request limits.
-        inserted = 0
+        # Batch in chunks of 500 to stay within Supabase request limits.
+        upserted = 0
         for i in range(0, len(rows), 500):
             chunk = rows[i : i + 500]
             response = (
                 self._client.table("tenders_raw")
-                .upsert(chunk, on_conflict="external_id,source", ignore_duplicates=not force_update)
+                .upsert(chunk, on_conflict="external_id,source", ignore_duplicates=False)
                 .execute()
             )
-            inserted += len(response.data) if response.data else 0
-        return inserted
+            upserted += len(response.data) if response.data else 0
+        return upserted

@@ -50,13 +50,14 @@ class RawTenderRepository:
                 ("buyer_type", "TEXT"),
                 ("status", "TEXT"),
                 ("cpv_codes", "TEXT"),
+                ("updated_at", "TEXT"),
             ]:
                 try:
                     conn.execute(f"ALTER TABLE tenders_raw ADD COLUMN {col} {coltype}")
                 except sqlite3.OperationalError:
                     pass  # column already exists
 
-    def upsert_many(self, tenders: Iterable[TenderRaw], captured_at: datetime, *, force_update: bool = False) -> int:
+    def upsert_many(self, tenders: Iterable[TenderRaw], captured_at: datetime) -> int:
         rows = [
             (
                 item.external_id,
@@ -70,7 +71,8 @@ class RawTenderRepository:
                 item.cpv,
                 item.budget_amount,
                 item.source,
-                captured_at.isoformat(),
+                captured_at.isoformat(),  # created_at — only used on first insert
+                captured_at.isoformat(),  # updated_at — refreshed on every upsert
                 item.contract_type,
                 item.procedure_type,
                 item.lot_count,
@@ -86,10 +88,9 @@ class RawTenderRepository:
 
         with self._connect() as conn:
             before = conn.total_changes
-            insert_verb = "INSERT OR REPLACE" if force_update else "INSERT OR IGNORE"
             conn.executemany(
-                f"""
-                {insert_verb} INTO tenders_raw (
+                """
+                INSERT INTO tenders_raw (
                     external_id,
                     title,
                     summary,
@@ -102,6 +103,7 @@ class RawTenderRepository:
                     budget_amount,
                     source,
                     created_at,
+                    updated_at,
                     contract_type,
                     procedure_type,
                     lot_count,
@@ -109,9 +111,28 @@ class RawTenderRepository:
                     buyer_type,
                     status,
                     cpv_codes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (external_id, source) DO UPDATE SET
+                    title           = excluded.title,
+                    summary         = excluded.summary,
+                    link            = excluded.link,
+                    published_at    = excluded.published_at,
+                    deadline_at     = excluded.deadline_at,
+                    buyer_name      = excluded.buyer_name,
+                    region          = excluded.region,
+                    cpv             = excluded.cpv,
+                    budget_amount   = excluded.budget_amount,
+                    contract_type   = excluded.contract_type,
+                    procedure_type  = excluded.procedure_type,
+                    lot_count       = excluded.lot_count,
+                    duration_months = excluded.duration_months,
+                    buyer_type      = excluded.buyer_type,
+                    status          = excluded.status,
+                    cpv_codes       = excluded.cpv_codes,
+                    updated_at      = excluded.updated_at
+                -- created_at is intentionally excluded: existing rows keep their original capture timestamp
                 """,
                 rows,
             )
-            inserted = conn.total_changes - before
-        return inserted
+            upserted = conn.total_changes - before
+        return upserted

@@ -1,0 +1,55 @@
+name: Enrich Tenders (code → label translation)
+
+on:
+  # Manual trigger — use full_rescan: true for the initial backfill of existing rows.
+  # For day-to-day use, enrichment runs automatically at the end of the capture workflow.
+  workflow_dispatch:
+    inputs:
+      full_rescan:
+        description: 'Re-enrich ALL tenders, not just unenriched ones (use for backfill)'
+        required: false
+        type: boolean
+        default: false
+      batch_size:
+        description: 'Rows fetched per Supabase request (default: 500)'
+        required: false
+        type: string
+        default: '500'
+
+jobs:
+  enrich:
+    name: Translate region/CPV codes to human-readable labels
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r pipeline/requirements.txt
+
+      - name: Enrich tenders
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          ARGS="--batch-size ${{ inputs.batch_size || '500' }}"
+          if [ "${{ inputs.full_rescan }}" = "true" ]; then
+            ARGS="$ARGS --full-rescan"
+          fi
+          python -m pipeline.run_enrich $ARGS
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Enrich job failed at $(date -u). Check the Actions log."

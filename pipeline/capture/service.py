@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass(slots=True)
 class CaptureRunResult:
     fetched: int
-    inserted: int
+    upserted: int
     last_run_at: Optional[datetime]
     new_last_run_at: datetime
     effective_since: Optional[datetime]
@@ -46,21 +46,21 @@ class CaptureService:
 
         tenders = self.client.fetch_since(effective_since)
         captured_at = datetime.now(timezone.utc)
-        inserted = self.repository.upsert_many(tenders, captured_at)
+        upserted = self.repository.upsert_many(tenders, captured_at)
 
         new_last_run = captured_at
         self.state_store.set_last_run_at(new_last_run)
 
         logger.info(
-            "Capture finished. fetched=%s inserted=%s new_last_run_at=%s",
+            "Capture finished. fetched=%s upserted=%s new_last_run_at=%s",
             len(tenders),
-            inserted,
+            upserted,
             new_last_run,
         )
 
         return CaptureRunResult(
             fetched=len(tenders),
-            inserted=inserted,
+            upserted=upserted,
             last_run_at=previous_run,
             new_last_run_at=new_last_run,
             effective_since=effective_since,

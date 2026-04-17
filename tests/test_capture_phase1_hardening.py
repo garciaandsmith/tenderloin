@@ -14,9 +14,11 @@ from pipeline.capture.storage import RawTenderRepository
 
 
 class CapturePhase1HardeningTests(unittest.TestCase):
-    def test_storage_deduplicates_by_external_id_and_source(self) -> None:
+    def test_storage_upserts_and_updates_existing_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             payload_path = Path(tmpdir) / "data.json"
+
+            # First run: tender published with no status and a typo in the deadline year
             payload_path.write_text(
                 json.dumps(
                     {
@@ -27,6 +29,8 @@ class CapturePhase1HardeningTests(unittest.TestCase):
                                 "summary": "Resumen",
                                 "link": "https://example.org/1",
                                 "published_at": "2026-01-01T12:00:00+00:00",
+                                "deadline_at": "2030-02-01T00:00:00+00:00",  # typo: should be 2026
+                                "status": None,
                             }
                         ]
                     }
@@ -40,13 +44,50 @@ class CapturePhase1HardeningTests(unittest.TestCase):
             service = CaptureService(client=client, repository=repo, state_store=state)
 
             first = service.run()
-            second = service.run()
+            self.assertEqual(first.upserted, 1)
 
-            self.assertEqual(first.inserted, 1)
-            self.assertEqual(second.inserted, 0)
+            with sqlite3.connect(db_path) as conn:
+                row = conn.execute(
+                    "SELECT status, deadline_at, created_at, updated_at FROM tenders_raw WHERE external_id='exp-001'"
+                ).fetchone()
+            self.assertIsNone(row[0])  # status is None
+            self.assertIn("2030", row[1])  # typo still present
+            created_at_first = row[2]
+            self.assertIsNotNone(row[3])  # updated_at is set
+
+            # Second run: source corrects the deadline and advances the status to ADJ
+            payload_path.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "external_id": "exp-001",
+                                "title": "Contrato 1",
+                                "summary": "Resumen",
+                                "link": "https://example.org/1",
+                                "published_at": "2026-01-01T12:00:00+00:00",
+                                "deadline_at": "2026-02-01T00:00:00+00:00",  # corrected
+                                "status": "ADJ",
+                            }
+                        ]
+                    }
+                )
+            )
+
+            second = service.run()
+            self.assertEqual(second.upserted, 1)
+
             with sqlite3.connect(db_path) as conn:
                 total = conn.execute("SELECT COUNT(*) FROM tenders_raw").fetchone()[0]
-            self.assertEqual(total, 1)
+                row = conn.execute(
+                    "SELECT status, deadline_at, created_at, updated_at FROM tenders_raw WHERE external_id='exp-001'"
+                ).fetchone()
+
+            self.assertEqual(total, 1)            # no duplicate row created
+            self.assertEqual(row[0], "ADJ")       # status updated
+            self.assertIn("2026", row[1])          # deadline corrected
+            self.assertEqual(row[2], created_at_first)  # created_at preserved
+            self.assertGreaterEqual(row[3], row[2])     # updated_at >= created_at
 
     def test_state_store_persists_last_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

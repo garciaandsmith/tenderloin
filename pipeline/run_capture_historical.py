@@ -61,7 +61,7 @@ def parse_args() -> argparse.Namespace:
         description=(
             "Bulk historical re-capture into tenders_raw. "
             "Downloads monthly ZIPs from PLACSP and updates existing rows "
-            "in-place (force_update=True), preserving all downstream FK references."
+            "in-place, preserving all downstream FK references."
         )
     )
     parser.add_argument(
@@ -150,7 +150,7 @@ def main() -> None:
             # since=None: no date filter — process every tender in the ZIP
             tenders = client.fetch_since(since=None)
             captured_at = datetime.now(timezone.utc)
-            updated = repository.upsert_many(tenders, captured_at, force_update=True)
+            updated = repository.upsert_many(tenders, captured_at)
 
             logger.info(
                 "[%d/%d] %s — fetched=%d updated=%d",

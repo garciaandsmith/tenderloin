@@ -99,6 +99,7 @@ create table public.tenders_raw (
   source          text not null default 'placsp',
   status          text,                            -- e.g. 'PUB','ADJ','FOR','EV','AN'
   created_at      timestamptz not null default now(),
+  updated_at      timestamptz,                         -- last time this row was refreshed from source
   -- extended fields for later pipeline stages
   contract_type   text,
   procedure_type  text,

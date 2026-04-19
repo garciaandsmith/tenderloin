@@ -59,6 +59,7 @@ export default function TrainingCard({
   const [isFetching, setIsFetching] = useState(false);
   const [pendingRetrainCount, setPendingRetrainCount] = useState(0);
   const [retrainStatus, setRetrainStatus] = useState<RetrainStatus>("idle");
+  const [scoreError, setScoreError] = useState<string | null>(null);
 
   const seenIds = useRef<Set<number>>(new Set(initialTenders.map((t) => t.id)));
   const fetchingRef = useRef(false);
@@ -161,6 +162,8 @@ export default function TrainingCard({
     const slot = slots[slotIndex];
     if (slot.status !== "filled") return;
 
+    setScoreError(null);
+
     // 1. Show processing overlay on this slot
     setSlots((prev) =>
       prev.map((s, i) =>
@@ -169,11 +172,23 @@ export default function TrainingCard({
     );
 
     // 2. Save score
-    await fetch(`/api/tenders/${tenderId}/score`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_id: projectId, score }),
-    });
+    try {
+      const res = await fetch(`/api/tenders/${tenderId}/score`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: projectId, score }),
+      });
+      if (!res.ok) throw new Error("submit-failed");
+    } catch {
+      // Revert slot so the user can try again
+      setSlots((prev) =>
+        prev.map((s, i) =>
+          i === slotIndex ? { status: "filled", tender: slot.tender } : s
+        )
+      );
+      setScoreError("No se pudo guardar la puntuación. Por favor, inténtalo de nuevo.");
+      return;
+    }
 
     // 3. Increment the scored counter and mark as pending retrain
     setScoredCount((c) => c + 1);
@@ -209,6 +224,18 @@ export default function TrainingCard({
   return (
     <div className="space-y-4">
       <TrainingCounter count={scoredCount} />
+
+      {scoreError && (
+        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm text-red-800">{scoreError}</p>
+          <button
+            onClick={() => setScoreError(null)}
+            className="ml-4 shrink-0 text-sm text-red-600 hover:text-red-800 underline underline-offset-2"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
 
       {pendingRetrainCount > 0 && (
         <div className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">

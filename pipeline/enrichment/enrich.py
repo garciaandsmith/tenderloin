@@ -34,22 +34,26 @@ _DEFAULT_CPV_DATA = Path(__file__).parent.parent.parent / "public" / "cpv-data.j
 _CHUNK_SIZE = 200
 
 
-def _translate_region(region: str) -> Optional[str]:
+def _translate_region(region: str) -> str:
     """Return a human-readable label for a region value.
 
     - NUTS code (e.g. "ES614") → looks up NUTS_LABELS, returns label or the
       code itself when it isn't in the table (unknown sub-province).
     - Already human-readable text → returned as-is.
+    - Empty / missing → returns "" (sentinel meaning "enriched, no data").
+
+    Returning "" instead of None for missing data allows the enrichment pipeline
+    to distinguish "not yet enriched" (NULL) from "enriched but no region" ("").
     """
     value = (region or "").strip()
     if not value:
-        return None
+        return ""
     if _NUTS_RE.match(value):
         return NUTS_LABELS.get(value.upper(), value)
     return value
 
 
-def _translate_cpv(cpv: str, cpv_labels: dict[str, str]) -> Optional[str]:
+def _translate_cpv(cpv: str, cpv_labels: dict[str, str]) -> str:
     """Return a human-readable label for a CPV value.
 
     Handles the three formats PLACSP can produce:
@@ -59,10 +63,12 @@ def _translate_cpv(cpv: str, cpv_labels: dict[str, str]) -> Optional[str]:
 
     For multi-code strings like "33696500 · 38434570 · Equipos médicos" the
     label for the first recognised code is returned.
+
+    Empty / missing → returns "" (sentinel meaning "enriched, no data").
     """
     value = (cpv or "").strip()
     if not value:
-        return None
+        return ""
     match = _CPV_CODE_RE.search(value)
     if match:
         label = cpv_labels.get(match.group(1))
@@ -154,7 +160,7 @@ def run_enrichment_pipeline(
 
         # Translate each row and group by (region_label, cpv_label) to minimise
         # the number of UPDATE calls (many tenders share the same NUTS code).
-        groups: dict[tuple[Optional[str], Optional[str]], list[int]] = defaultdict(list)
+        groups: dict[tuple[str, str], list[int]] = defaultdict(list)
         for row in batch:
             region_label = _translate_region(row.get("region") or "")
             cpv_label = _translate_cpv(row.get("cpv") or "", cpv_labels)

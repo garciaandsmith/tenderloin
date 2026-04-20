@@ -15,6 +15,11 @@ on:
         required: false
         type: string
         default: '500'
+      limit:
+        description: 'Max total tenders to process this run (leave blank for no limit; use with full_rescan to process in chunks)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   enrich:
@@ -46,6 +51,9 @@ jobs:
           ARGS="--batch-size ${{ inputs.batch_size || '500' }}"
           if [ "${{ inputs.full_rescan }}" = "true" ]; then
             ARGS="$ARGS --full-rescan"
+          fi
+          if [ -n "${{ inputs.limit }}" ]; then
+            ARGS="$ARGS --limit ${{ inputs.limit }}"
           fi
           python -m pipeline.run_enrich $ARGS
 

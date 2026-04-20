@@ -32,6 +32,12 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Re-enrich ALL tenders, not just those with NULL labels",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Stop after processing this many tenders (useful for breaking large backfills into runs)",
+    )
     parser.add_argument("--log-level", default="INFO", help="Log level")
     return parser.parse_args()
 
@@ -58,6 +64,7 @@ def main() -> None:
         supabase_key=supabase_key,
         batch_size=args.batch_size,
         full_rescan=args.full_rescan,
+        limit=args.limit,
     )
     print("enrich_result", summary)
 

@@ -107,6 +107,7 @@ def run_enrichment_pipeline(
     batch_size: int = 500,
     full_rescan: bool = False,
     cpv_data_path: Optional[Path] = None,
+    limit: Optional[int] = None,
 ) -> dict:
     """Translate raw codes in tenders_raw to human-readable label columns.
 
@@ -116,6 +117,7 @@ def run_enrichment_pipeline(
         batch_size:    Rows fetched per Supabase SELECT request.
         full_rescan:   Re-enrich all rows, not just those with NULL labels.
         cpv_data_path: Override path to cpv-data.json.
+        limit:         Stop after processing this many rows (None = no limit).
 
     Returns:
         Dict with ``processed`` and ``updated`` counts.
@@ -134,11 +136,16 @@ def run_enrichment_pipeline(
     offset = 0
 
     while True:
+        remaining = (limit - total_processed) if limit is not None else batch_size
+        if remaining <= 0:
+            break
+        current_batch_size = min(batch_size, remaining)
+
         def _select_query():
             q = client_ref[0].table("tenders_raw").select("id,region,cpv")
             if not full_rescan:
                 q = q.is_("region_label", "null")
-            return q.range(offset, offset + batch_size - 1)
+            return q.range(offset, offset + current_batch_size - 1)
 
         response = _execute_with_retry(_select_query, refresh_client)
         batch = response.data or []
@@ -174,8 +181,8 @@ def run_enrichment_pipeline(
             total_updated,
         )
 
-        if len(batch) < batch_size:
+        if len(batch) < current_batch_size:
             break
-        offset += batch_size
+        offset += current_batch_size
 
     return {"processed": total_processed, "updated": total_updated}

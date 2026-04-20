@@ -86,8 +86,9 @@ _RETRY_BACKOFF = 2  # seconds
 
 
 def _execute_with_retry(build_query_fn, on_connection_error):
-    """Execute a Supabase query, calling on_connection_error to refresh the client on HTTP/2 errors."""
+    """Execute a Supabase query, retrying on transient connection and server errors."""
     import httpx
+    from postgrest.exceptions import APIError
 
     for attempt in range(_MAX_RETRIES):
         try:
@@ -98,13 +99,20 @@ def _execute_with_retry(build_query_fn, on_connection_error):
             wait = _RETRY_BACKOFF * (2 ** attempt)
             logger.warning(
                 "Connection error on attempt %d/%d (%s); retrying in %ds with a fresh client",
-                attempt + 1,
-                _MAX_RETRIES,
-                exc,
-                wait,
+                attempt + 1, _MAX_RETRIES, exc, wait,
             )
             time.sleep(wait)
             on_connection_error()
+        except APIError as exc:
+            # Retry on transient gateway/server errors (502, 503, 504).
+            if str(getattr(exc, "code", "")) not in ("502", "503", "504") or attempt == _MAX_RETRIES - 1:
+                raise
+            wait = _RETRY_BACKOFF * (2 ** attempt)
+            logger.warning(
+                "Server error %s on attempt %d/%d; retrying in %ds",
+                getattr(exc, "code", "?"), attempt + 1, _MAX_RETRIES, wait,
+            )
+            time.sleep(wait)
 
 
 def run_enrichment_pipeline(

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Optional
@@ -74,6 +75,32 @@ def _translate_cpv(cpv: str, cpv_labels: dict[str, str]) -> Optional[str]:
     return value
 
 
+_MAX_RETRIES = 3
+_RETRY_BACKOFF = 2  # seconds
+
+
+def _execute_with_retry(build_query_fn, on_connection_error):
+    """Execute a Supabase query, calling on_connection_error to refresh the client on HTTP/2 errors."""
+    import httpx
+
+    for attempt in range(_MAX_RETRIES):
+        try:
+            return build_query_fn().execute()
+        except (httpx.RemoteProtocolError, httpx.LocalProtocolError) as exc:
+            if attempt == _MAX_RETRIES - 1:
+                raise
+            wait = _RETRY_BACKOFF * (2 ** attempt)
+            logger.warning(
+                "Connection error on attempt %d/%d (%s); retrying in %ds with a fresh client",
+                attempt + 1,
+                _MAX_RETRIES,
+                exc,
+                wait,
+            )
+            time.sleep(wait)
+            on_connection_error()
+
+
 def run_enrichment_pipeline(
     supabase_url: str,
     supabase_key: str,
@@ -95,18 +122,25 @@ def run_enrichment_pipeline(
     """
     from supabase import create_client
 
-    client = create_client(supabase_url, supabase_key)
+    # Use a list so the closure can rebind the client on connection errors.
+    client_ref = [create_client(supabase_url, supabase_key)]
     cpv_labels = load_cpv_labels(cpv_data_path or _DEFAULT_CPV_DATA)
+
+    def refresh_client():
+        client_ref[0] = create_client(supabase_url, supabase_key)
 
     total_processed = 0
     total_updated = 0
     offset = 0
 
     while True:
-        query = client.table("tenders_raw").select("id,region,cpv")
-        if not full_rescan:
-            query = query.is_("region_label", "null")
-        response = query.range(offset, offset + batch_size - 1).execute()
+        def _select_query():
+            q = client_ref[0].table("tenders_raw").select("id,region,cpv")
+            if not full_rescan:
+                q = q.is_("region_label", "null")
+            return q.range(offset, offset + batch_size - 1)
+
+        response = _execute_with_retry(_select_query, refresh_client)
         batch = response.data or []
         if not batch:
             break
@@ -123,9 +157,13 @@ def run_enrichment_pipeline(
         for (region_label, cpv_label), ids in groups.items():
             for i in range(0, len(ids), _CHUNK_SIZE):
                 chunk = ids[i : i + _CHUNK_SIZE]
-                client.table("tenders_raw").update(
-                    {"region_label": region_label, "cpv_label": cpv_label}
-                ).in_("id", chunk).execute()
+                _execute_with_retry(
+                    lambda c=chunk, rl=region_label, cl=cpv_label: client_ref[0]
+                    .table("tenders_raw")
+                    .update({"region_label": rl, "cpv_label": cl})
+                    .in_("id", c),
+                    refresh_client,
+                )
                 total_updated += len(chunk)
 
         total_processed += len(batch)

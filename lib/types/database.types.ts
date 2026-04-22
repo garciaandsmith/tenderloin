@@ -170,6 +170,10 @@ export interface Database {
           lot_count: number | null;
           duration_months: number | null;
           buyer_type: string | null;
+          cpv_codes: string[];
+          region_label: string | null;
+          cpv_label: string | null;
+          cpv_labels: string[];
         };
         Insert: {
           id?: number;
@@ -191,6 +195,10 @@ export interface Database {
           lot_count?: number | null;
           duration_months?: number | null;
           buyer_type?: string | null;
+          cpv_codes?: string[];
+          region_label?: string | null;
+          cpv_label?: string | null;
+          cpv_labels?: string[];
         };
         Update: {
           external_id?: string;
@@ -210,6 +218,10 @@ export interface Database {
           lot_count?: number | null;
           duration_months?: number | null;
           buyer_type?: string | null;
+          cpv_codes?: string[];
+          region_label?: string | null;
+          cpv_label?: string | null;
+          cpv_labels?: string[];
         };
         Relationships: [];
       };

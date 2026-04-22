@@ -1,12 +1,17 @@
-name: Enrich Tenders (code → label translation)
+name: Enrich Tenders
 
 on:
-  # Manual trigger — use full_rescan: true for the initial backfill of existing rows.
-  # For day-to-day use, enrichment runs automatically at the end of the capture workflow.
+  schedule:
+    # Runs 30 minutes after the daily capture (07:30 UTC) to ensure new rows are ready.
+    - cron: '30 7 * * *'
   workflow_dispatch:
     inputs:
       full_rescan:
-        description: 'Re-enrich ALL tenders, not just unenriched ones (use for backfill)'
+        description: >
+          Re-enrich ALL tenders regardless of current state.
+          Run once after deploying a schema migration (e.g. adding cpv_labels) to
+          backfill existing rows. For day-to-day use leave this off — the action
+          automatically detects unenriched rows via region_label IS NULL.
         required: false
         type: boolean
         default: false
@@ -16,14 +21,21 @@ on:
         type: string
         default: '500'
       limit:
-        description: 'Max total tenders to process this run (leave blank for no limit; use with full_rescan to process in chunks)'
+        description: >
+          Max tenders to process this run (leave blank for no limit).
+          Useful with full_rescan to spread a large backfill over several runs.
         required: false
         type: string
         default: ''
 
+# Prevent concurrent enrichment runs from racing over the same rows.
+concurrency:
+  group: enrich
+  cancel-in-progress: false
+
 jobs:
   enrich:
-    name: Translate region/CPV codes to human-readable labels
+    name: Translate CPV codes and region codes to human-readable labels
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import ScoreButtons from "./ScoreButtons";
 import TrainingCounter from "./TrainingCounter";
 import { formatBudget } from "@/lib/utils/formatters";
-import { cpvLabel } from "@/lib/utils/cpv";
 import type { TrainingTender } from "@/lib/types/app.types";
 
 type RetrainStatus = "idle" | "loading" | "done" | "error";
@@ -338,11 +337,11 @@ export default function TrainingCard({
                     </div>
 
                     <div className="flex flex-wrap gap-1.5">
-                      {tender.cpv && (
-                        <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
-                          {cpvLabel(tender.cpv)}
+                      {tender.cpv_labels?.map((label) => (
+                        <span key={label} className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
+                          {label}
                         </span>
-                      )}
+                      ))}
                       {tender.region && (
                         <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
                           {tender.region}

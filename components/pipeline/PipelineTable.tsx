@@ -17,7 +17,6 @@ export type { TenderRow };
 type ColKey =
   | "contract_type"
   | "procedure_type"
-  | "cpv"
   | "cpv_codes"
   | "region"
   | "buyer_type"
@@ -46,7 +45,6 @@ const COLUMNS: ColDef[] = [
   { key: "deadline_at",     label: "Plazo",          sortField: "deadline_at",  defaultVisible: false, align: "right", width: "110px" },
   { key: "contract_type",   label: "Tipo contrato",  defaultVisible: false, width: "110px" },
   { key: "procedure_type",  label: "Procedimiento",  defaultVisible: false, width: "130px" },
-  { key: "cpv",             label: "CPV (código)",   defaultVisible: false, width: "160px" },
   { key: "buyer_type",      label: "Tipo organismo", defaultVisible: false, width: "130px" },
   { key: "budget_amount",   label: "Presupuesto",    sortField: "budget_amount",    defaultVisible: false, align: "right", width: "110px" },
   { key: "lot_count",       label: "Lotes",          sortField: "lot_count",        defaultVisible: false, align: "right", width: "60px" },
@@ -392,13 +390,6 @@ function CellValue({
       return (
         <span className="truncate block max-w-[120px]" title={tender.procedure_type ?? ""}>
           {tender.procedure_type ?? "—"}
-        </span>
-      );
-
-    case "cpv":
-      return (
-        <span className="truncate block max-w-[150px]" title={tender.cpv ?? ""}>
-          {cpvLabelOnly(tender.cpv ?? "") || tender.cpv || "—"}
         </span>
       );
 

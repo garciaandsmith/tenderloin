@@ -3,9 +3,10 @@
 Usage:
     python -m pipeline.run_enrich
 
-Reads tenders_raw rows where region_label or cpv_label is NULL and writes the
-translated labels back.  Already-enriched rows are skipped unless --full-rescan
-is passed (useful after adding new code mappings).
+Reads tenders_raw rows where region_label IS NULL and writes region_label and
+cpv_labels.  Already-enriched rows are skipped unless --full-rescan is passed
+(useful for backfilling cpv_labels on rows enriched before the cpv_labels column
+was added, or after updating the CPV vocabulary).
 
 Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.
 """

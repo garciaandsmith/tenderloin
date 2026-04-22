@@ -94,7 +94,6 @@ create table public.tenders_raw (
   deadline_at     timestamptz,
   buyer_name      text not null,
   region          text not null,
-  cpv             text not null,
   budget_amount   numeric,
   source          text not null default 'placsp',
   status          text,                            -- e.g. 'PUB','ADJ','FOR','EV','AN'
@@ -106,16 +105,14 @@ create table public.tenders_raw (
   lot_count       integer,
   duration_months integer,
   buyer_type      text,
-  cpv_codes       text[] not null default '{}',       -- all CPV codes (primary kept in cpv)
+  cpv_codes       text[] not null default '{}',       -- all raw CPV codes on the tender
   region_label    text,                               -- human-readable region name (set by run_enrich)
-  cpv_label       text,                               -- human-readable label for primary CPV code (set by run_enrich)
   cpv_labels      text[] not null default '{}',       -- human-readable labels for all CPV codes (set by run_enrich)
   unique (external_id, source)
 );
 
 create index tenders_raw_published_at_idx on public.tenders_raw (published_at desc);
 create index tenders_raw_deadline_at_idx  on public.tenders_raw (deadline_at);
-create index tenders_raw_cpv_idx          on public.tenders_raw (cpv);
 create index tenders_raw_cpv_codes_idx    on public.tenders_raw using gin (cpv_codes);
 create index tenders_raw_region_idx       on public.tenders_raw (region);
 

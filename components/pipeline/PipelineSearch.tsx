@@ -47,7 +47,6 @@ const QUERY_FIELDS: FieldDef[] = [
   { key: "buyer_name", label: "Contratante", type: "text" },
   { key: "contract_type", label: "Tipo de contrato", type: "select", options: CONTRACT_TYPE_OPTIONS },
   { key: "status", label: "Estado", type: "select", options: STATUS_OPTIONS },
-  { key: "cpv", label: "CPV (prefijo)", type: "text" },
   { key: "region", label: "Región", type: "select", options: REGION_OPTIONS },
   { key: "budget_amount", label: "Presupuesto (€)", type: "number" },
   { key: "published_at", label: "Fecha publicación", type: "date" },

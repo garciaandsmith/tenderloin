@@ -32,7 +32,7 @@ export interface TrainingTender {
   buyer_name: string;
   budget_amount: number | null;
   published_at: string;
-  cpv: string | null;
+  cpv_labels: string[];
   region: string | null;
   contract_type: string | null;
   procedure_type: string | null;
@@ -49,7 +49,7 @@ export interface ScoredTenderEntry {
   score: number;
   scored_at: string;
   title: string;
-  cpv: string | null;
+  cpv_labels: string[];
   region: string | null;
 }
 

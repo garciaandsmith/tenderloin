@@ -29,7 +29,6 @@ class SupabaseRawTenderRepository:
                 "deadline_at": t.deadline_at.isoformat() if t.deadline_at else None,
                 "buyer_name": t.buyer_name,
                 "region": t.region,
-                "cpv": t.cpv,
                 "budget_amount": t.budget_amount,
                 "source": t.source,
                 # created_at is intentionally excluded: new rows get the DB column default (now());

@@ -160,7 +160,6 @@ export interface Database {
           deadline_at: string | null;
           buyer_name: string;
           region: string;
-          cpv: string;
           budget_amount: number | null;
           source: string;
           status: string | null;
@@ -172,7 +171,6 @@ export interface Database {
           buyer_type: string | null;
           cpv_codes: string[];
           region_label: string | null;
-          cpv_label: string | null;
           cpv_labels: string[];
         };
         Insert: {
@@ -185,7 +183,6 @@ export interface Database {
           deadline_at?: string | null;
           buyer_name: string;
           region: string;
-          cpv: string;
           budget_amount?: number | null;
           source?: string;
           status?: string | null;
@@ -197,7 +194,6 @@ export interface Database {
           buyer_type?: string | null;
           cpv_codes?: string[];
           region_label?: string | null;
-          cpv_label?: string | null;
           cpv_labels?: string[];
         };
         Update: {
@@ -209,7 +205,6 @@ export interface Database {
           deadline_at?: string | null;
           buyer_name?: string;
           region?: string;
-          cpv?: string;
           budget_amount?: number | null;
           source?: string;
           status?: string | null;
@@ -220,7 +215,6 @@ export interface Database {
           buyer_type?: string | null;
           cpv_codes?: string[];
           region_label?: string | null;
-          cpv_label?: string | null;
           cpv_labels?: string[];
         };
         Relationships: [];

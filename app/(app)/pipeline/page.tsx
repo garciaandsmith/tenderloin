@@ -23,7 +23,6 @@ const VALID_FIELDS = new Set([
   "buyer_name",
   "contract_type",
   "status",
-  "cpv",
   "region",
   "budget_amount",
   "published_at",
@@ -128,7 +127,7 @@ export default async function PipelinePage({ searchParams }: Props) {
   let query = supabase
     .from("tenders_raw")
     .select(
-      "id, external_id, title, summary, link, published_at, deadline_at, buyer_name, region, cpv, cpv_codes, budget_amount, source, status, created_at, contract_type, procedure_type, lot_count, duration_months, buyer_type",
+      "id, external_id, title, summary, link, published_at, deadline_at, buyer_name, region, cpv_codes, cpv_labels, budget_amount, source, status, created_at, contract_type, procedure_type, lot_count, duration_months, buyer_type",
       { count: "exact" }
     );
 

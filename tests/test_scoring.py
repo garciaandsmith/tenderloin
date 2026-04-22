@@ -363,7 +363,7 @@ class TestFilterEvaluateTender(unittest.TestCase):
             "title": "Servicio de consultoría digital",
             "summary": "Proyecto de transformación digital para administración pública",
             "region": "ES30",
-            "cpv": "72000000",
+            "cpv_codes": [],
             "budget_amount": 50000,
             "contract_type": "services",
             "procedure_type": "open",
@@ -407,12 +407,12 @@ class TestFilterEvaluateTender(unittest.TestCase):
         self.assertTrue(result["passed"])
 
     def test_fails_cpv_mismatch(self) -> None:
-        result = self._eval(self._tender(cpv="45000000"), {"cpv_codes": ["72", "73"]})
+        result = self._eval(self._tender(cpv_codes=["45000000"]), {"cpv_codes": ["72", "73"]})
         self.assertFalse(result["passed"])
         self.assertIn("cpv_mismatch", result["discard_reasons"])
 
     def test_passes_cpv_prefix_match(self) -> None:
-        result = self._eval(self._tender(cpv="72300000"), {"cpv_codes": ["72"]})
+        result = self._eval(self._tender(cpv_codes=["72300000"]), {"cpv_codes": ["72"]})
         self.assertTrue(result["passed"])
 
     def test_fails_contract_type_mismatch(self) -> None:

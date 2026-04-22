@@ -53,6 +53,22 @@ def _translate_region(region: str) -> str:
     return value
 
 
+def _translate_cpv_codes(cpv_codes: list[str], cpv_labels: dict[str, str]) -> list[str]:
+    """Return human-readable labels for every code in cpv_codes.
+
+    Each element is either the label from the CPV vocabulary or the raw code
+    when the code is not in the vocabulary.  Empty codes are skipped.
+    """
+    result = []
+    for code in cpv_codes:
+        code = code.strip()
+        if not code:
+            continue
+        label = cpv_labels.get(code)
+        result.append(label if label else code)
+    return result
+
+
 def _translate_cpv(cpv: str, cpv_labels: dict[str, str]) -> str:
     """Return a human-readable label for a CPV value.
 
@@ -156,7 +172,7 @@ def run_enrichment_pipeline(
         current_batch_size = min(batch_size, remaining)
 
         def _select_query(lid=last_id, bs=current_batch_size):
-            q = client_ref[0].table("tenders_raw").select("id,region,cpv")
+            q = client_ref[0].table("tenders_raw").select("id,region,cpv,cpv_codes")
             if not full_rescan:
                 q = q.is_("region_label", "null")
             return q.gt("id", lid).order("id").limit(bs)
@@ -168,22 +184,23 @@ def run_enrichment_pipeline(
 
         last_id = batch[-1]["id"]
 
-        # Translate each row and group by (region_label, cpv_label) to minimise
-        # the number of UPDATE calls (many tenders share the same NUTS code).
-        groups: dict[tuple[str, str], list[int]] = defaultdict(list)
+        # Translate each row and group by (region_label, cpv_label, cpv_labels) to
+        # minimise the number of UPDATE calls (many tenders share the same NUTS code).
+        groups: dict[tuple[str, str, tuple[str, ...]], list[int]] = defaultdict(list)
         for row in batch:
             region_label = _translate_region(row.get("region") or "")
             cpv_label = _translate_cpv(row.get("cpv") or "", cpv_labels)
-            groups[(region_label, cpv_label)].append(row["id"])
+            all_cpv_labels = tuple(_translate_cpv_codes(row.get("cpv_codes") or [], cpv_labels))
+            groups[(region_label, cpv_label, all_cpv_labels)].append(row["id"])
 
         # Bulk-update each group in chunks that respect URL length limits.
-        for (region_label, cpv_label), ids in groups.items():
+        for (region_label, cpv_label, all_cpv_labels), ids in groups.items():
             for i in range(0, len(ids), _CHUNK_SIZE):
                 chunk = ids[i : i + _CHUNK_SIZE]
                 _execute_with_retry(
-                    lambda c=chunk, rl=region_label, cl=cpv_label: client_ref[0]
+                    lambda c=chunk, rl=region_label, cl=cpv_label, al=list(all_cpv_labels): client_ref[0]
                     .table("tenders_raw")
-                    .update({"region_label": rl, "cpv_label": cl})
+                    .update({"region_label": rl, "cpv_label": cl, "cpv_labels": al})
                     .in_("id", c),
                     refresh_client,
                 )

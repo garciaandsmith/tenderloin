@@ -142,7 +142,11 @@ def run_enrichment_pipeline(
         def _select_query(lid=last_id, bs=current_batch_size):
             q = client_ref[0].table("tenders_raw").select("id,region,cpv_codes")
             if not full_rescan:
-                q = q.is_("region_label", "null")
+                # Two conditions that indicate a row needs enrichment:
+                # 1. Never touched at all (region_label IS NULL) — covers new captures.
+                # 2. Has CPV codes but no translated labels yet — covers rows that were
+                #    enriched before the cpv_labels column existed (backfill).
+                q = q.or_("region_label.is.null,and(cpv_codes.neq.{},cpv_labels.eq.{})")
             return q.gt("id", lid).order("id").limit(bs)
 
         response = _execute_with_retry(_select_query, refresh_client)

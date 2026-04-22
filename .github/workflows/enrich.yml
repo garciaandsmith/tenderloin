@@ -9,9 +9,9 @@ on:
       full_rescan:
         description: >
           Re-enrich ALL tenders regardless of current state.
-          Run once after deploying a schema migration (e.g. adding cpv_labels) to
-          backfill existing rows. For day-to-day use leave this off — the action
-          automatically detects unenriched rows via region_label IS NULL.
+          Not needed for backfilling cpv_labels — the action automatically picks up
+          any row that has cpv_codes but no cpv_labels yet.
+          Only needed after updating the CPV vocabulary file (cpv-data.json).
         required: false
         type: boolean
         default: false

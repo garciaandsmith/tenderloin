@@ -169,7 +169,7 @@ export async function getTrainingTenderBatch(
   const { data, error } = await supabase
     .from("tenders_raw")
     .select(
-      "id, title, summary, link, buyer_name, budget_amount, published_at, deadline_at, cpv, region, contract_type, procedure_type"
+      "id, title, summary, link, buyer_name, budget_amount, published_at, deadline_at, cpv_labels, region, contract_type, procedure_type"
     )
     .in("id", passedIds)
     .lt("deadline_at", now)
@@ -248,7 +248,7 @@ export async function getNextTestTender(
   // 3. Fetch the full tender row.
   const { data: tenderRows, error: tError } = await supabase
     .from("tenders_raw")
-    .select("id, title, summary, link, buyer_name, budget_amount, published_at, cpv, region, contract_type, procedure_type")
+    .select("id, title, summary, link, buyer_name, budget_amount, published_at, cpv_labels, region, contract_type, procedure_type")
     .eq("id", candidate.tender_id)
     .limit(1);
 
@@ -271,7 +271,7 @@ export async function getScoredTenders(
 
   const { data, error } = await supabase
     .from("tender_scores")
-    .select("tender_id, score, scored_at, tenders_raw ( title, cpv, region )")
+    .select("tender_id, score, scored_at, tenders_raw ( title, cpv_labels, region )")
     .eq("project_id", projectId)
     .eq("training_session", trainingSession)
     .order("scored_at", { ascending: false })
@@ -286,7 +286,7 @@ export async function getScoredTenders(
       score: row.score,
       scored_at: row.scored_at,
       title: t?.title ?? "(sin título)",
-      cpv: t?.cpv ?? null,
+      cpv_labels: t?.cpv_labels ?? [],
       region: t?.region ?? null,
     } as ScoredTenderEntry;
   });

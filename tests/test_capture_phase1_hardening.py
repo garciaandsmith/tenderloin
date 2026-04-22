@@ -180,7 +180,6 @@ class CapturePhase1HardeningTests(unittest.TestCase):
             self.assertEqual(tender.external_id, "exp-atom-001")
             self.assertEqual(tender.buyer_name, "Ayuntamiento de Madrid")
             self.assertEqual(tender.region, "ES300")
-            self.assertEqual(tender.cpv, "79341000")
             self.assertAlmostEqual(tender.budget_amount or 0.0, 125000.50, places=2)
             self.assertIsNotNone(tender.deadline_at)
             self.assertEqual(tender.contract_type, "services")

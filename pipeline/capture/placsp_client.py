@@ -254,9 +254,7 @@ class PlacspClient:
                 or ""
             )
 
-            # CPV: collect all codes; keep first as primary for backward compat
             cpv_codes = _extract_all_cpv_codes(entry)
-            cpv = cpv_codes[0] if cpv_codes else ""
 
             budget_amount = _parse_float(
                 _path_text(entry, "TenderingTerms", "BudgetAmount", "TaxExclusiveAmount")
@@ -323,7 +321,6 @@ class PlacspClient:
                     deadline_at=deadline_at,
                     buyer_name=buyer_name,
                     region=region,
-                    cpv=cpv,
                     budget_amount=budget_amount,
                     source=self.config.source_name,
                     contract_type=contract_type,
@@ -355,7 +352,6 @@ class PlacspClient:
                     deadline_at=deadline,
                     buyer_name=str(item.get("buyer_name", "")),
                     region=str(item.get("region", "")),
-                    cpv=str(item.get("cpv", "")),
                     budget_amount=_parse_float(item.get("budget_amount")),
                     source=self.config.source_name,
                     contract_type=item.get("contract_type"),

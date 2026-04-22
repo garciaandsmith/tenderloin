@@ -17,7 +17,6 @@ class TenderRaw:
     deadline_at: Optional[datetime]
     buyer_name: str
     region: str
-    cpv: str
     budget_amount: Optional[float]
     source: str = "placsp"
     contract_type: Optional[str] = None

@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatBudget, formatDate, daysUntil } from "@/lib/utils/formatters";
-import { cpvLabel } from "@/lib/utils/cpv";
 import { nutsLabel } from "@/lib/utils/nuts";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink } from "lucide-react";
@@ -130,7 +129,7 @@ export default async function TenderDetailPage({ params }: Props) {
           <Stat label="Contratante" value={tender.buyer_name} />
           <Stat label="Presupuesto estimado" value={formatBudget(tender.budget_amount)} />
           <Stat label="Región" value={nutsLabel(tender.region) || tender.region} />
-          <Stat label="Código CPV" value={`${tender.cpv}${cpvLabel(tender.cpv) ? ` — ${cpvLabel(tender.cpv)}` : ""}`} />
+          <Stat label="CPV" value={tender.cpv_labels?.join(" · ") || "—"} />
           <Stat
             label="Tipo de contrato"
             value={CONTRACT_TYPE_LABELS[tender.contract_type ?? ""] ?? tender.contract_type ?? "—"}

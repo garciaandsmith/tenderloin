@@ -1,4 +1,3 @@
-import { cpvLabel } from "@/lib/utils/cpv";
 import type { ScoredTenderEntry } from "@/lib/types/app.types";
 
 interface Props {
@@ -44,10 +43,10 @@ export default function ScoreHistoryByCpv({ tenders }: Props) {
     );
   }
 
-  // Build per-CPV breakdown.
+  // Build per-CPV breakdown (keyed by primary label, or "Sin CPV").
   const cpvMap = new Map<string, { count: number; scores: number[] }>();
   for (const t of tenders) {
-    const key = t.cpv ?? "Sin CPV";
+    const key = t.cpv_labels[0] ?? "Sin CPV";
     const entry = cpvMap.get(key) ?? { count: 0, scores: [] };
     entry.count++;
     entry.scores.push(t.score);
@@ -55,8 +54,8 @@ export default function ScoreHistoryByCpv({ tenders }: Props) {
   }
 
   const cpvRows = Array.from(cpvMap.entries())
-    .map(([cpv, { count, scores }]) => ({
-      cpv,
+    .map(([label, { count, scores }]) => ({
+      label,
       count,
       avg: scores.reduce((a, b) => a + b, 0) / scores.length,
       dist: [0, 1, 2, 3, 4, 5].map((s) => scores.filter((x) => x === s).length),
@@ -87,8 +86,8 @@ export default function ScoreHistoryByCpv({ tenders }: Props) {
             </thead>
             <tbody>
               {cpvRows.map((row) => (
-                <tr key={row.cpv} className="border-b last:border-0 hover:bg-muted/20">
-                  <td className="px-4 py-2 text-xs">{cpvLabel(row.cpv)}</td>
+                <tr key={row.label} className="border-b last:border-0 hover:bg-muted/20">
+                  <td className="px-4 py-2 text-xs">{row.label}</td>
                   <td className="text-right px-3 py-2 tabular-nums">{row.count}</td>
                   <td className="text-right px-3 py-2 tabular-nums">{row.avg.toFixed(1)}</td>
                   {row.dist.map((n, i) => (
@@ -115,8 +114,8 @@ export default function ScoreHistoryByCpv({ tenders }: Props) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm truncate">{t.title}</p>
                 <div className="flex gap-2 mt-0.5">
-                  {t.cpv && (
-                    <span className="text-xs text-muted-foreground">{cpvLabel(t.cpv)}</span>
+                  {t.cpv_labels[0] && (
+                    <span className="text-xs text-muted-foreground">{t.cpv_labels[0]}</span>
                   )}
                   {t.region && (
                     <span className="text-xs text-muted-foreground">{t.region}</span>

@@ -1,10 +1,10 @@
 """Post-ingestion enrichment: translate raw NUTS and CPV codes to human-readable labels.
 
 Reads tenders_raw rows where region_label IS NULL (or all rows on a full rescan),
-translates the region and cpv fields using the NUTS and CPV lookup tables, then
-writes the results back to the region_label and cpv_label columns.
+translates the region and cpv_codes fields using the NUTS and CPV lookup tables, then
+writes the results back to the region_label and cpv_labels columns.
 
-The original region / cpv / cpv_codes columns are never modified so that the
+The original region / cpv_codes columns are never modified so that the
 filter pipeline's prefix-matching logic continues to work correctly.
 """
 from __future__ import annotations
@@ -22,10 +22,6 @@ logger = logging.getLogger(__name__)
 
 # Matches any NUTS code for Spain: "ES" optionally followed by 1-4 alphanumeric chars.
 _NUTS_RE = re.compile(r"^ES[0-9A-Z]{0,4}$", re.IGNORECASE)
-
-# Extracts the first 8-digit CPV numeric code from a string that may contain
-# mixed content like "45262520 · Trabajos de construcción".
-_CPV_CODE_RE = re.compile(r"\b(\d{8})\b")
 
 # Path to cpv-data.json relative to this file's location (repo_root/public/).
 _DEFAULT_CPV_DATA = Path(__file__).parent.parent.parent / "public" / "cpv-data.json"
@@ -67,34 +63,6 @@ def _translate_cpv_codes(cpv_codes: list[str], cpv_labels: dict[str, str]) -> li
         label = cpv_labels.get(code)
         result.append(label if label else code)
     return result
-
-
-def _translate_cpv(cpv: str, cpv_labels: dict[str, str]) -> str:
-    """Return a human-readable label for a CPV value.
-
-    Handles the three formats PLACSP can produce:
-    - Pure code:           "92000000"
-    - Code + description:  "45262520 · Trabajos de construcción"
-    - Pure description:    "Equipos médicos"
-
-    For multi-code strings like "33696500 · 38434570 · Equipos médicos" the
-    label for the first recognised code is returned.
-
-    Empty / missing → returns "" (sentinel meaning "enriched, no data").
-    """
-    value = (cpv or "").strip()
-    if not value:
-        return ""
-    match = _CPV_CODE_RE.search(value)
-    if match:
-        label = cpv_labels.get(match.group(1))
-        if label:
-            return label
-        # Code exists but is not in our vocabulary — extract any trailing text.
-        remainder = _CPV_CODE_RE.sub("", value).strip(" ·-–,")
-        return remainder if remainder else match.group(1)
-    # No numeric code found — the value is already descriptive text.
-    return value
 
 
 _MAX_RETRIES = 3
@@ -172,9 +140,13 @@ def run_enrichment_pipeline(
         current_batch_size = min(batch_size, remaining)
 
         def _select_query(lid=last_id, bs=current_batch_size):
-            q = client_ref[0].table("tenders_raw").select("id,region,cpv,cpv_codes")
+            q = client_ref[0].table("tenders_raw").select("id,region,cpv_codes")
             if not full_rescan:
-                q = q.is_("region_label", "null")
+                # Two conditions that indicate a row needs enrichment:
+                # 1. Never touched at all (region_label IS NULL) — covers new captures.
+                # 2. Has CPV codes but no translated labels yet — covers rows that were
+                #    enriched before the cpv_labels column existed (backfill).
+                q = q.or_("region_label.is.null,and(cpv_codes.neq.{},cpv_labels.eq.{})")
             return q.gt("id", lid).order("id").limit(bs)
 
         response = _execute_with_retry(_select_query, refresh_client)
@@ -184,23 +156,22 @@ def run_enrichment_pipeline(
 
         last_id = batch[-1]["id"]
 
-        # Translate each row and group by (region_label, cpv_label, cpv_labels) to
-        # minimise the number of UPDATE calls (many tenders share the same NUTS code).
-        groups: dict[tuple[str, str, tuple[str, ...]], list[int]] = defaultdict(list)
+        # Translate each row and group by (region_label, cpv_labels) to minimise
+        # the number of UPDATE calls (many tenders share the same NUTS code).
+        groups: dict[tuple[str, tuple[str, ...]], list[int]] = defaultdict(list)
         for row in batch:
             region_label = _translate_region(row.get("region") or "")
-            cpv_label = _translate_cpv(row.get("cpv") or "", cpv_labels)
             all_cpv_labels = tuple(_translate_cpv_codes(row.get("cpv_codes") or [], cpv_labels))
-            groups[(region_label, cpv_label, all_cpv_labels)].append(row["id"])
+            groups[(region_label, all_cpv_labels)].append(row["id"])
 
         # Bulk-update each group in chunks that respect URL length limits.
-        for (region_label, cpv_label, all_cpv_labels), ids in groups.items():
+        for (region_label, all_cpv_labels), ids in groups.items():
             for i in range(0, len(ids), _CHUNK_SIZE):
                 chunk = ids[i : i + _CHUNK_SIZE]
                 _execute_with_retry(
-                    lambda c=chunk, rl=region_label, cl=cpv_label, al=list(all_cpv_labels): client_ref[0]
+                    lambda c=chunk, rl=region_label, al=list(all_cpv_labels): client_ref[0]
                     .table("tenders_raw")
-                    .update({"region_label": rl, "cpv_label": cl, "cpv_labels": al})
+                    .update({"region_label": rl, "cpv_labels": al})
                     .in_("id", c),
                     refresh_client,
                 )

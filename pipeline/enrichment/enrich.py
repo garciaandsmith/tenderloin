@@ -147,7 +147,7 @@ def run_enrichment_pipeline(
 
     total_processed = 0
     total_updated = 0
-    offset = 0
+    last_id = 0
 
     while True:
         remaining = (limit - total_processed) if limit is not None else batch_size
@@ -155,16 +155,18 @@ def run_enrichment_pipeline(
             break
         current_batch_size = min(batch_size, remaining)
 
-        def _select_query():
+        def _select_query(lid=last_id, bs=current_batch_size):
             q = client_ref[0].table("tenders_raw").select("id,region,cpv")
             if not full_rescan:
                 q = q.is_("region_label", "null")
-            return q.range(offset, offset + current_batch_size - 1)
+            return q.gt("id", lid).order("id").limit(bs)
 
         response = _execute_with_retry(_select_query, refresh_client)
         batch = response.data or []
         if not batch:
             break
+
+        last_id = batch[-1]["id"]
 
         # Translate each row and group by (region_label, cpv_label) to minimise
         # the number of UPDATE calls (many tenders share the same NUTS code).
@@ -197,6 +199,5 @@ def run_enrichment_pipeline(
 
         if len(batch) < current_batch_size:
             break
-        offset += current_batch_size
 
     return {"processed": total_processed, "updated": total_updated}

@@ -1,17 +1,19 @@
 name: Enrich Tenders
 
+# Enrichment now happens at write time inside the capture upsert, so this
+# workflow is manual-only.  Run it when:
+#   - You need to backfill rows captured before write-time enrichment was
+#     introduced (leave full_rescan false — only NULL-label rows are touched).
+#   - You have updated public/cpv-data.json and want to refresh all labels
+#     (set full_rescan true).
+
 on:
-  schedule:
-    # Runs 30 minutes after the daily capture (07:30 UTC) to ensure new rows are ready.
-    - cron: '30 7 * * *'
   workflow_dispatch:
     inputs:
       full_rescan:
         description: >
-          Re-enrich ALL tenders regardless of current state.
-          Not needed for backfilling cpv_labels — the action automatically picks up
-          any row that has cpv_codes but no cpv_labels yet.
-          Only needed after updating the CPV vocabulary file (cpv-data.json).
+          Re-enrich ALL tenders (use after updating cpv-data.json).
+          Leave false for a targeted backfill of rows that still have no labels.
         required: false
         type: boolean
         default: false
@@ -27,11 +29,6 @@ on:
         required: false
         type: string
         default: ''
-
-# Prevent concurrent enrichment runs from racing over the same rows.
-concurrency:
-  group: enrich
-  cancel-in-progress: false
 
 jobs:
   enrich:

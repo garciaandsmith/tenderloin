@@ -131,61 +131,74 @@ def run_enrichment_pipeline(
 
     total_processed = 0
     total_updated = 0
-    last_id = 0
 
-    while True:
-        remaining = (limit - total_processed) if limit is not None else batch_size
-        if remaining <= 0:
-            break
-        current_batch_size = min(batch_size, remaining)
+    # Build the list of filter passes to run.  Splitting the two conditions into
+    # separate sequential passes avoids a combined OR that forces a full-table scan
+    # and triggers Supabase's statement timeout (PostgreSQL error 57014).
+    if full_rescan:
+        # No filter — process every row.
+        passes = [None]
+    else:
+        # Pass 1: rows never enriched (region_label IS NULL).
+        # Pass 2: rows enriched before cpv_labels existed (backfill).
+        # Each uses a simple equality/IS-NULL filter that can hit an index.
+        passes = [
+            "region_label.is.null",
+            "cpv_codes.neq.{},cpv_labels.eq.{}",
+        ]
 
-        def _select_query(lid=last_id, bs=current_batch_size):
-            q = client_ref[0].table("tenders_raw").select("id,region,cpv_codes")
-            if not full_rescan:
-                # Two conditions that indicate a row needs enrichment:
-                # 1. Never touched at all (region_label IS NULL) — covers new captures.
-                # 2. Has CPV codes but no translated labels yet — covers rows that were
-                #    enriched before the cpv_labels column existed (backfill).
-                q = q.or_("region_label.is.null,and(cpv_codes.neq.{},cpv_labels.eq.{})")
-            return q.gt("id", lid).order("id").limit(bs)
+    for filter_expr in passes:
+        last_id = 0
 
-        response = _execute_with_retry(_select_query, refresh_client)
-        batch = response.data or []
-        if not batch:
-            break
+        while True:
+            remaining = (limit - total_processed) if limit is not None else batch_size
+            if remaining <= 0:
+                break
+            current_batch_size = min(batch_size, remaining)
 
-        last_id = batch[-1]["id"]
+            def _select_query(lid=last_id, bs=current_batch_size, filt=filter_expr):
+                q = client_ref[0].table("tenders_raw").select("id,region,cpv_codes")
+                if filt is not None:
+                    q = q.or_(filt)
+                return q.gt("id", lid).order("id").limit(bs)
 
-        # Translate each row and group by (region_label, cpv_labels) to minimise
-        # the number of UPDATE calls (many tenders share the same NUTS code).
-        groups: dict[tuple[str, tuple[str, ...]], list[int]] = defaultdict(list)
-        for row in batch:
-            region_label = _translate_region(row.get("region") or "")
-            all_cpv_labels = tuple(_translate_cpv_codes(row.get("cpv_codes") or [], cpv_labels))
-            groups[(region_label, all_cpv_labels)].append(row["id"])
+            response = _execute_with_retry(_select_query, refresh_client)
+            batch = response.data or []
+            if not batch:
+                break
 
-        # Bulk-update each group in chunks that respect URL length limits.
-        for (region_label, all_cpv_labels), ids in groups.items():
-            for i in range(0, len(ids), _CHUNK_SIZE):
-                chunk = ids[i : i + _CHUNK_SIZE]
-                _execute_with_retry(
-                    lambda c=chunk, rl=region_label, al=list(all_cpv_labels): client_ref[0]
-                    .table("tenders_raw")
-                    .update({"region_label": rl, "cpv_labels": al})
-                    .in_("id", c),
-                    refresh_client,
-                )
-                total_updated += len(chunk)
+            last_id = batch[-1]["id"]
 
-        total_processed += len(batch)
-        logger.info(
-            "Enriched batch of %d tenders (total processed: %d, updated: %d)",
-            len(batch),
-            total_processed,
-            total_updated,
-        )
+            # Translate each row and group by (region_label, cpv_labels) to minimise
+            # the number of UPDATE calls (many tenders share the same NUTS code).
+            groups: dict[tuple[str, tuple[str, ...]], list[int]] = defaultdict(list)
+            for row in batch:
+                region_label = _translate_region(row.get("region") or "")
+                all_cpv_labels = tuple(_translate_cpv_codes(row.get("cpv_codes") or [], cpv_labels))
+                groups[(region_label, all_cpv_labels)].append(row["id"])
 
-        if len(batch) < current_batch_size:
-            break
+            # Bulk-update each group in chunks that respect URL length limits.
+            for (region_label, all_cpv_labels), ids in groups.items():
+                for i in range(0, len(ids), _CHUNK_SIZE):
+                    chunk = ids[i : i + _CHUNK_SIZE]
+                    _execute_with_retry(
+                        lambda c=chunk, rl=region_label, al=list(all_cpv_labels): client_ref[0]
+                        .table("tenders_raw")
+                        .update({"region_label": rl, "cpv_labels": al})
+                        .in_("id", c),
+                        refresh_client,
+                    )
+                    total_updated += len(chunk)
+
+            total_processed += len(batch)
+            logger.info(
+                "Enriched batch of %d tenders (total processed: %d, updated: %d)",
+                len(batch),
+                total_processed,
+                total_updated,
+            )
+
+            if len(batch) < current_batch_size:
+                break
 
     return {"processed": total_processed, "updated": total_updated}

@@ -68,7 +68,7 @@ class RawTenderRepository:
                 item.deadline_at.isoformat() if item.deadline_at else None,
                 item.buyer_name,
                 item.region,
-                item.cpv,
+                "",  # legacy cpv column; full array stored in cpv_codes below
                 item.budget_amount,
                 item.source,
                 captured_at.isoformat(),  # created_at — only used on first insert

@@ -115,6 +115,9 @@ create index tenders_raw_published_at_idx on public.tenders_raw (published_at de
 create index tenders_raw_deadline_at_idx  on public.tenders_raw (deadline_at);
 create index tenders_raw_cpv_codes_idx    on public.tenders_raw using gin (cpv_codes);
 create index tenders_raw_region_idx       on public.tenders_raw (region);
+-- Partial indexes for the two enrichment SELECT passes (avoids full-table scans).
+create index tenders_raw_enrich_pass1_idx on public.tenders_raw (id) where region_label is null;
+create index tenders_raw_enrich_pass2_idx on public.tenders_raw (id) where cpv_codes != '{}' and cpv_labels = '{}';
 
 -- ─────────────────────────────────────────────────────────────
 -- PIPELINE_STATE (mirrors SQLite pipeline_state)

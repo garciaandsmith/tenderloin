@@ -132,22 +132,23 @@ def run_enrichment_pipeline(
     total_processed = 0
     total_updated = 0
 
-    # Build the list of filter passes to run.  Splitting the two conditions into
-    # separate sequential passes avoids a combined OR that forces a full-table scan
-    # and triggers Supabase's statement timeout (PostgreSQL error 57014).
+    # Build the list of filter passes to run.  Each pass is a callable that
+    # applies a single-column filter (or None for a full rescan).  Using direct
+    # filter methods (is_, eq, neq) instead of or_() lets the query planner
+    # match the partial indexes added in 20260423_enrichment_select_indexes.sql
+    # and avoids a full-table scan that triggers statement timeout (error 57014).
     if full_rescan:
         # No filter — process every row.
         passes = [None]
     else:
         # Pass 1: rows never enriched (region_label IS NULL).
-        # Pass 2: rows enriched before cpv_labels existed (backfill).
-        # Each uses a simple equality/IS-NULL filter that can hit an index.
+        # Pass 2: rows enriched before cpv_labels existed (has codes, no labels).
         passes = [
-            "region_label.is.null",
-            "cpv_codes.neq.{},cpv_labels.eq.{}",
+            lambda q: q.is_("region_label", "null"),
+            lambda q: q.neq("cpv_codes", "{}").eq("cpv_labels", "{}"),
         ]
 
-    for filter_expr in passes:
+    for apply_filter in passes:
         last_id = 0
 
         while True:
@@ -156,10 +157,10 @@ def run_enrichment_pipeline(
                 break
             current_batch_size = min(batch_size, remaining)
 
-            def _select_query(lid=last_id, bs=current_batch_size, filt=filter_expr):
+            def _select_query(lid=last_id, bs=current_batch_size, filt=apply_filter):
                 q = client_ref[0].table("tenders_raw").select("id,region,cpv_codes")
                 if filt is not None:
-                    q = q.or_(filt)
+                    q = filt(q)
                 return q.gt("id", lid).order("id").limit(bs)
 
             response = _execute_with_retry(_select_query, refresh_client)

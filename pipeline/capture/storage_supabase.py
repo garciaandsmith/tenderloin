@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 from pathlib import Path
 from typing import Iterable
 
@@ -9,6 +10,7 @@ from pipeline.enrichment.enrich import _translate_region, _translate_cpv_codes
 from pipeline.enrichment.codes import load_cpv_labels
 
 _DEFAULT_CPV_DATA = Path(__file__).parent.parent.parent / "public" / "cpv-data.json"
+logger = logging.getLogger(__name__)
 
 
 class SupabaseRawTenderRepository:
@@ -66,11 +68,33 @@ class SupabaseRawTenderRepository:
         # Batch in chunks of 500 to stay within Supabase request limits.
         upserted = 0
         for i in range(0, len(rows), 500):
-            chunk = rows[i : i + 500]
+            upserted += self._upsert_chunk(rows[i : i + 500])
+        return upserted
+
+    def _upsert_chunk(self, chunk: list) -> int:
+        try:
             response = (
                 self._client.table("tenders_raw")
                 .upsert(chunk, on_conflict="external_id,source", ignore_duplicates=False)
                 .execute()
             )
-            upserted += len(response.data) if response.data else 0
-        return upserted
+            return len(response.data) if response.data else 0
+        except Exception as exc:
+            msg = str(exc)
+            # The production DB may still have cpv as NOT NULL (pending drop migration).
+            # Retry once with an empty-string sentinel so new-row INSERTs succeed.
+            if "cpv" in msg and (
+                "23502" in msg or "not-null" in msg.lower() or "null value" in msg.lower()
+            ):
+                logger.warning(
+                    "cpv NOT NULL constraint detected; retrying with legacy cpv='' "
+                    "(apply supabase/migrations/20260424_make_cpv_nullable.sql to skip this retry)"
+                )
+                fallback = [{**row, "cpv": ""} for row in chunk]
+                response = (
+                    self._client.table("tenders_raw")
+                    .upsert(fallback, on_conflict="external_id,source", ignore_duplicates=False)
+                    .execute()
+                )
+                return len(response.data) if response.data else 0
+            raise

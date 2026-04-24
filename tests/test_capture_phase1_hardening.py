@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import io
 import json
 import sqlite3
 import tempfile
 import unittest
+import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import MagicMock, call, patch
 
-from pipeline.capture.placsp_client import PlacspClient, PlacspClientConfig
+from pipeline.capture.placsp_client import PlacspClient, PlacspClientConfig, _parse_datetime
 from pipeline.capture.service import CaptureService
 from pipeline.capture.state_store import StateStore
 from pipeline.capture.storage import RawTenderRepository
@@ -216,6 +219,138 @@ class CapturePhase1HardeningTests(unittest.TestCase):
                 tender.deadline_at,
                 datetime(2026, 5, 12, 23, 59, tzinfo=timezone.utc),
             )
+
+
+class ParseDatetimeTimezoneTests(unittest.TestCase):
+    def test_naive_iso_string_gets_utc(self) -> None:
+        result = _parse_datetime("2026-02-10T09:00:00")
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result.tzinfo)
+        self.assertEqual(result.tzinfo, timezone.utc)
+        self.assertEqual(result.replace(tzinfo=None), datetime(2026, 2, 10, 9, 0, 0))
+
+    def test_date_only_string_gets_utc_midnight(self) -> None:
+        result = _parse_datetime("2026-02-10")
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result.tzinfo)
+        self.assertEqual(result, datetime(2026, 2, 10, 0, 0, tzinfo=timezone.utc))
+
+    def test_z_suffix_string_is_utc(self) -> None:
+        result = _parse_datetime("2026-02-10T09:00:00Z")
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result.tzinfo)
+        self.assertEqual(result, datetime(2026, 2, 10, 9, 0, tzinfo=timezone.utc))
+
+    def test_offset_aware_string_preserves_offset(self) -> None:
+        result = _parse_datetime("2026-02-10T09:00:00+02:00")
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result.tzinfo)
+        self.assertEqual(result.utcoffset().total_seconds(), 7200)
+
+    def test_zip_since_filter_with_naive_updated_does_not_raise(self) -> None:
+        """_fetch_zip must not raise TypeError when published_at is naive and since is aware."""
+        xml_content = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<feed xmlns="http://www.w3.org/2005/Atom">'
+            "<entry>"
+            "<id>exp-naive-zip-001</id>"
+            "<title>Contrato Naive</title>"
+            "<summary>Resumen</summary>"
+            "<updated>2026-01-10T09:00:00</updated>"  # no timezone
+            "</entry>"
+            "</feed>"
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as zf:
+                zf.writestr("feed.xml", xml_content)
+            zip_path = Path(tmpdir) / "data.zip"
+            zip_path.write_bytes(buf.getvalue())
+
+            since = datetime(2026, 1, 9, 0, 0, tzinfo=timezone.utc)
+            client = PlacspClient(PlacspClientConfig(source_url=f"file://{zip_path}"))
+            tenders = client.fetch_since(since)
+            self.assertIsInstance(tenders, list)
+            self.assertEqual(len(tenders), 1)
+            self.assertIsNotNone(tenders[0].published_at.tzinfo)
+
+
+class SupabaseUpsertRetryTests(unittest.TestCase):
+    def _make_repo(self, mock_client):
+        from pipeline.capture.storage_supabase import SupabaseRawTenderRepository
+
+        repo = object.__new__(SupabaseRawTenderRepository)
+        repo._client = mock_client
+        repo._cpv_labels = {}
+        return repo
+
+    def _make_tender(self):
+        from pipeline.capture.models import TenderRaw
+
+        return TenderRaw(
+            external_id="t-001",
+            title="Test",
+            summary="Summary",
+            link="https://example.org/1",
+            published_at=datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            deadline_at=None,
+            buyer_name="Buyer",
+            region="ES300",
+            budget_amount=1000.0,
+        )
+
+    def test_upsert_succeeds_without_retry_on_first_attempt(self) -> None:
+        mock_client = MagicMock()
+        mock_client.table.return_value.upsert.return_value.execute.return_value.data = [{"id": 1}]
+        repo = self._make_repo(mock_client)
+        captured_at = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+        result = repo.upsert_many([self._make_tender()], captured_at)
+
+        self.assertEqual(result, 1)
+        self.assertEqual(mock_client.table.return_value.upsert.call_count, 1)
+        sent = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertNotIn("cpv", sent[0])
+
+    def test_upsert_retries_with_cpv_on_not_null_error(self) -> None:
+        mock_upsert = MagicMock()
+        mock_client = MagicMock()
+        mock_client.table.return_value.upsert = mock_upsert
+
+        cpv_error = Exception(
+            '{"code":"23502","message":"null value in column \\"cpv\\" of relation \\"tenders_raw\\" violates not-null constraint"}'
+        )
+        success_response = MagicMock()
+        success_response.data = [{"id": 1}]
+        mock_upsert.return_value.execute.side_effect = [cpv_error, None]
+        mock_upsert.return_value.execute.side_effect = [cpv_error]
+
+        # First call raises; second call succeeds
+        execute_mock = MagicMock()
+        execute_mock.side_effect = [cpv_error, success_response]
+        mock_upsert.return_value.execute = execute_mock
+
+        repo = self._make_repo(mock_client)
+        captured_at = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+        result = repo.upsert_many([self._make_tender()], captured_at)
+
+        self.assertEqual(result, 1)
+        self.assertEqual(execute_mock.call_count, 2)
+        retry_payload = mock_upsert.call_args_list[1][0][0]
+        self.assertIn("cpv", retry_payload[0])
+        self.assertEqual(retry_payload[0]["cpv"], "")
+
+    def test_upsert_reraises_non_cpv_errors(self) -> None:
+        mock_client = MagicMock()
+        mock_client.table.return_value.upsert.return_value.execute.side_effect = RuntimeError(
+            "connection refused"
+        )
+        repo = self._make_repo(mock_client)
+        captured_at = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+        with self.assertRaises(RuntimeError):
+            repo.upsert_many([self._make_tender()], captured_at)
 
 
 if __name__ == "__main__":

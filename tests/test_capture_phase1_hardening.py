@@ -353,5 +353,102 @@ class SupabaseUpsertRetryTests(unittest.TestCase):
             repo.upsert_many([self._make_tender()], captured_at)
 
 
+class TranslateCpvCodesTests(unittest.TestCase):
+    """Unit tests for _translate_cpv_codes in pipeline.enrichment.enrich."""
+
+    def setUp(self):
+        from pipeline.enrichment.enrich import _translate_cpv_codes
+        self._fn = _translate_cpv_codes
+        self._vocab = {
+            "79341000": "Servicios de publicidad",
+            "45000000": "Trabajos de construcción",
+        }
+
+    def test_known_code_returns_label(self):
+        result = self._fn(["79341000"], self._vocab)
+        self.assertEqual(result, ["Servicios de publicidad"])
+
+    def test_unknown_code_returns_raw_code(self):
+        result = self._fn(["99999999"], self._vocab)
+        self.assertEqual(result, ["99999999"])
+
+    def test_code_with_check_digit_returns_label(self):
+        """PLACSP sometimes appends a check digit: '79341000-6' -> lookup '79341000'."""
+        result = self._fn(["79341000-6"], self._vocab)
+        self.assertEqual(result, ["Servicios de publicidad"])
+
+    def test_code_with_unknown_check_digit_base_returns_raw(self):
+        result = self._fn(["99999999-0"], self._vocab)
+        self.assertEqual(result, ["99999999-0"])
+
+    def test_empty_codes_are_skipped(self):
+        result = self._fn(["", "  ", "79341000"], self._vocab)
+        self.assertEqual(result, ["Servicios de publicidad"])
+
+    def test_empty_list_returns_empty(self):
+        result = self._fn([], self._vocab)
+        self.assertEqual(result, [])
+
+    def test_multiple_codes_translated_independently(self):
+        result = self._fn(["79341000", "45000000", "00000000"], self._vocab)
+        self.assertEqual(result, ["Servicios de publicidad", "Trabajos de construcción", "00000000"])
+
+
+class EnrichTwoPassTests(unittest.TestCase):
+    """Verify that run_enrichment_pipeline runs two SELECT passes when not full_rescan."""
+
+    def test_incremental_mode_issues_two_passes(self):
+        """Without full_rescan the pipeline must query both pass-1 and pass-2 filters."""
+        from unittest.mock import MagicMock, call, patch
+
+        executed_queries: list = []
+
+        def fake_execute(build_fn, _on_err):
+            q = build_fn()
+            executed_queries.append(q)
+            # Return an empty batch so the loop exits immediately.
+            resp = MagicMock()
+            resp.data = []
+            return resp
+
+        with patch("pipeline.enrichment.enrich._execute_with_retry", side_effect=fake_execute), \
+             patch("pipeline.enrichment.enrich.load_cpv_labels", return_value={}), \
+             patch("supabase.create_client"):
+            from pipeline.enrichment.enrich import run_enrichment_pipeline
+            run_enrichment_pipeline(
+                supabase_url="https://x.supabase.co",
+                supabase_key="key",
+                full_rescan=False,
+            )
+
+        # Two SELECT calls — one per pass.
+        self.assertEqual(len(executed_queries), 2, "Expected exactly 2 SELECT passes")
+
+    def test_full_rescan_issues_single_pass(self):
+        """With full_rescan=True only one (unfiltered) pass runs."""
+        from unittest.mock import MagicMock, patch
+
+        executed_queries: list = []
+
+        def fake_execute(build_fn, _on_err):
+            q = build_fn()
+            executed_queries.append(q)
+            resp = MagicMock()
+            resp.data = []
+            return resp
+
+        with patch("pipeline.enrichment.enrich._execute_with_retry", side_effect=fake_execute), \
+             patch("pipeline.enrichment.enrich.load_cpv_labels", return_value={}), \
+             patch("supabase.create_client"):
+            from pipeline.enrichment.enrich import run_enrichment_pipeline
+            run_enrichment_pipeline(
+                supabase_url="https://x.supabase.co",
+                supabase_key="key",
+                full_rescan=True,
+            )
+
+        self.assertEqual(len(executed_queries), 1, "Expected exactly 1 SELECT pass for full_rescan")
+
+
 if __name__ == "__main__":
     unittest.main()

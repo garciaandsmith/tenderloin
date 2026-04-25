@@ -58,6 +58,10 @@ def _translate_cpv_codes(cpv_codes: list[str], cpv_labels: dict[str, str]) -> li
 
     Each element is either the label from the CPV vocabulary or the raw code
     when the code is not in the vocabulary.  Empty codes are skipped.
+
+    PLACSP sometimes includes a check digit after a hyphen (e.g. "79341000-6").
+    The CPV vocabulary uses bare 8-digit codes, so we fall back to the base code
+    when the full string is not found.
     """
     result = []
     for code in cpv_codes:
@@ -65,6 +69,8 @@ def _translate_cpv_codes(cpv_codes: list[str], cpv_labels: dict[str, str]) -> li
         if not code:
             continue
         label = cpv_labels.get(code)
+        if label is None and "-" in code:
+            label = cpv_labels.get(code.split("-")[0])
         result.append(label if label else code)
     return result
 
@@ -137,59 +143,78 @@ def run_enrichment_pipeline(
 
     total_processed = 0
     total_updated = 0
-    last_id = 0
 
-    while True:
-        remaining = (limit - total_processed) if limit is not None else batch_size
-        if remaining <= 0:
-            break
-        current_batch_size = min(batch_size, remaining)
+    # Build the list of filter passes.  Each pass is a callable that applies a
+    # single-column filter to a SELECT query, or None for a full rescan.
+    # Using separate passes with direct filter methods (is_, eq, neq) instead of
+    # a combined or_() lets the query planner hit the partial indexes created in
+    # 20260423_enrichment_select_indexes.sql and avoids the full-table scans that
+    # were causing statement timeouts (PostgreSQL error 57014).
+    if full_rescan:
+        passes = [None]
+    else:
+        # Pass 1: rows never enriched (region_label IS NULL).
+        #         Hits partial index tenders_raw_enrich_pass1_idx.
+        # Pass 2: rows enriched before cpv_labels existed — they have CPV codes
+        #         but empty labels (region_label already set, cpv_labels still {}).
+        #         Hits partial index tenders_raw_enrich_pass2_idx.
+        passes = [
+            lambda q: q.is_("region_label", "null"),
+            lambda q: q.neq("cpv_codes", "{}").eq("cpv_labels", "{}"),
+        ]
 
-        def _select_query(lid=last_id, bs=current_batch_size):
-            q = client_ref[0].table("tenders_raw").select("id,region,cpv_codes")
-            if not full_rescan:
-                # Only rows never enriched (retroactive backfill).
-                # Uses the partial index tenders_raw_enrich_pass1_idx.
-                q = q.is_("region_label", "null")
-            return q.gt("id", lid).order("id").limit(bs)
+    for apply_filter in passes:
+        last_id = 0
 
-        response = _execute_with_retry(_select_query, refresh_client)
-        batch = response.data or []
-        if not batch:
-            break
+        while True:
+            remaining = (limit - total_processed) if limit is not None else batch_size
+            if remaining <= 0:
+                break
+            current_batch_size = min(batch_size, remaining)
 
-        last_id = batch[-1]["id"]
+            def _select_query(lid=last_id, bs=current_batch_size, filt=apply_filter):
+                q = client_ref[0].table("tenders_raw").select("id,region,cpv_codes")
+                if filt is not None:
+                    q = filt(q)
+                return q.gt("id", lid).order("id").limit(bs)
 
-        # Translate each row and group by (region_label, cpv_labels) to minimise
-        # the number of UPDATE calls (many tenders share the same NUTS code).
-        groups: dict[tuple[str, tuple[str, ...]], list[int]] = defaultdict(list)
-        for row in batch:
-            region_label = _translate_region(row.get("region") or "")
-            all_cpv_labels = tuple(_translate_cpv_codes(row.get("cpv_codes") or [], cpv_labels))
-            groups[(region_label, all_cpv_labels)].append(row["id"])
+            response = _execute_with_retry(_select_query, refresh_client)
+            batch = response.data or []
+            if not batch:
+                break
 
-        # Bulk-update each group in chunks that respect URL length limits.
-        for (region_label, all_cpv_labels), ids in groups.items():
-            for i in range(0, len(ids), _CHUNK_SIZE):
-                chunk = ids[i : i + _CHUNK_SIZE]
-                _execute_with_retry(
-                    lambda c=chunk, rl=region_label, al=list(all_cpv_labels): client_ref[0]
-                    .table("tenders_raw")
-                    .update({"region_label": rl, "cpv_labels": al})
-                    .in_("id", c),
-                    refresh_client,
-                )
-                total_updated += len(chunk)
+            last_id = batch[-1]["id"]
 
-        total_processed += len(batch)
-        logger.info(
-            "Enriched batch of %d tenders (total processed: %d, updated: %d)",
-            len(batch),
-            total_processed,
-            total_updated,
-        )
+            # Translate each row and group by (region_label, cpv_labels) to minimise
+            # the number of UPDATE calls (many tenders share the same NUTS code).
+            groups: dict[tuple[str, tuple[str, ...]], list[int]] = defaultdict(list)
+            for row in batch:
+                region_label = _translate_region(row.get("region") or "")
+                all_cpv_labels = tuple(_translate_cpv_codes(row.get("cpv_codes") or [], cpv_labels))
+                groups[(region_label, all_cpv_labels)].append(row["id"])
 
-        if len(batch) < current_batch_size:
-            break
+            # Bulk-update each group in chunks that respect URL length limits.
+            for (region_label, all_cpv_labels), ids in groups.items():
+                for i in range(0, len(ids), _CHUNK_SIZE):
+                    chunk = ids[i : i + _CHUNK_SIZE]
+                    _execute_with_retry(
+                        lambda c=chunk, rl=region_label, al=list(all_cpv_labels): client_ref[0]
+                        .table("tenders_raw")
+                        .update({"region_label": rl, "cpv_labels": al})
+                        .in_("id", c),
+                        refresh_client,
+                    )
+                    total_updated += len(chunk)
+
+            total_processed += len(batch)
+            logger.info(
+                "Enriched batch of %d tenders (total processed: %d, updated: %d)",
+                len(batch),
+                total_processed,
+                total_updated,
+            )
+
+            if len(batch) < current_batch_size:
+                break
 
     return {"processed": total_processed, "updated": total_updated}

@@ -65,6 +65,13 @@ class SupabaseRawTenderRepository:
         if not rows:
             return 0
 
+        # Deduplicate by conflict key — PostgreSQL rejects two rows with the
+        # same (external_id, source) in a single ON CONFLICT statement.
+        seen: dict[tuple, dict] = {}
+        for row in rows:
+            seen[(row["external_id"], row["source"])] = row
+        rows = list(seen.values())
+
         # Batch in chunks of 500 to stay within Supabase request limits.
         upserted = 0
         for i in range(0, len(rows), 500):

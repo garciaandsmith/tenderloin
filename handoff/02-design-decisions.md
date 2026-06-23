@@ -104,9 +104,9 @@ Each entry covers: the decision, why it was made, the trade-offs, and whether th
 **Replaces**: The prototype's two-category structure (technical / administrative freeform summaries). That structure was too coarse and too implementation-specific.
 
 **Trade-offs**:
-- A 262-item extraction is a large prompt. Document analysis will be more expensive in tokens than a short summary. This needs to be factored into cost planning.
-- The template will evolve. The data model must version the template and handle items being added or removed without breaking existing project configurations.
-- Per-project item configuration (which items are auto-fill, go/no-go, or red flags) needs its own data model and operator UI.
+- A large extraction template means a large prompt per analysis run. Token cost will be higher than freeform summaries. Plan for this — especially as the template grows toward its final size.
+- The template is a living document, built by reviewing real tenders over time. The data model must treat it as versioned: items will be added, renamed, and reorganized. Existing project configurations must survive template updates gracefully.
+- Per-project configuration is a sparse selection from the master template. Most items have no project-specific behavior. The data model should reflect this (a sparse config table, not a row per project per item for all 300+ items).
 
 **Document retrieval**: Must fetch all documents attached to a tender (not just specific types). The AI receives whatever is available.
 

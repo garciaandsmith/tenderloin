@@ -110,17 +110,17 @@ This is a post-save notification, not a pre-save confirmation step. The filter c
 
 ---
 
-### 4. Per-project template configuration: how granular?
+### 4. Per-project template configuration: data model and versioning
 
-**Context**: The extraction template has 262 items. Each project needs to configure, per item: auto-fill value, go/no-go rule, or red flag condition. Most items will have no project-specific configuration (just "extract and show").
+**Context**: The master extraction template is a living document — currently ~262 items, will grow as more real tenders are reviewed. Per-project configuration is a sparse selection: the operator marks some items as critical (auto-fill, go/no-go, or red flag) and leaves the rest as display-only.
 
 **What needs deciding**:
-- What's the data model for per-project item configuration? (A sparse config table keyed on project_id + item_id is likely the right approach.)
-- Is the go/no-go logic simple (threshold comparison) or rule-based (conditional expressions)?
-- Who configures this — the operator only, or can client users configure it too?
-- Does the template version matter? If the template gains or loses items, what happens to existing project configurations?
+- **Data model**: A sparse config table (`project_id` + `item_id` + config mode + value/rule) is probably right. Confirm before building.
+- **Go/no-go rule structure**: Is the comparison logic simple (extracted value vs. a stored threshold) or does it need conditional expressions? Simple is probably sufficient for v1.
+- **Template versioning**: When items are added, renamed, or reorganized in the master template, what happens to project configs that reference old item IDs? Options: stable item IDs that never change (items are only added, never renamed/deleted), or a migration step when the template is updated.
+- **Template update workflow**: Who updates the master template, how, and how often? Is it a database record, a file in the repo, or managed in the UI?
 
-**Why it matters**: This drives the schema for project configuration and the UI for the operator setup flow.
+**Why it matters**: The template is the spine of the analysis feature. Getting its versioning model wrong means painful migrations every time the template grows — and it will grow significantly during the first year.
 
 ---
 

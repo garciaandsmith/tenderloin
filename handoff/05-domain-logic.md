@@ -14,13 +14,18 @@ Manual searches on PLACSP are slow and miss things. This tool automates the tria
 
 ## The operator model
 
-The tool is not self-serve. A professional operator (consultant, account manager) sets it up for each client. The operator:
-- Creates the client's project(s)
-- Configures the hard filters based on the client's business profile
-- Guides the client through the initial training session
-- Monitors the system and interprets results
+The tool is not self-serve. It is intentionally complex to configure, and that complexity is managed by a **consultant-operator** who works on behalf of the client.
 
-End users (the client's staff) primarily use the inbox and occasionally the training interface. They don't configure filters directly (though the system allows it).
+The operator:
+- Creates the client's project(s)
+- Configures the hard filters based on a deep understanding of the client's business profile
+- Selects and configures which template items are critical, go/no-go, or red flags for this client
+- Guides the client through the initial training session
+- Interprets results and adjusts configuration over time
+
+End users (the client's staff) primarily use the inbox and the training interface. They are not expected to configure the system. The operator is the primary configuration actor.
+
+This means: the configuration UI should optimize for a knowledgeable operator working carefully, not for a client who wants something simple. Power and precision matter more than discoverability.
 
 ---
 
@@ -145,32 +150,38 @@ The AI's job is not to summarize tender documents freely. It is to search those 
 
 ### The extraction template
 
-The template contains **262 items** organized into **12 blocks**:
+The template is a **master list of information items** that can appear in public tenders. It is a living document — currently around 262 items across 12 blocks, and will grow as more real tenders are reviewed. The goal is to be as comprehensive as possible: every piece of information that could appear in any tender should have a named item in the template.
 
-1. **General tender data** (26 items) — identifiers, contracting body, contract type, CPV codes, lots, variants
-2. **Calendar and procedure** (20 items) — deadlines, submission format, envelope structure, evaluation dates
-3. **Object and scope** (19 items) — what's being contracted, deliverables, geographic scope, excluded services
-4. **Economic conditions** (19 items) — base budget, VAT, unit prices, price revision, modification limits
-5. **Requirements to bid** (22 items) — legal standing, solvency criteria, required certifications, insurance minimums
-6. **Team and resources required** (16 items) — mandatory profiles, qualifications, experience, tools, non-subcontractable staff
-7. **Technical solution required** (28 items) — methodology, work plan, logistics, audiovisual, sustainability, IP conditions
-8. **Award criteria** (21 items) — scoring weights, subjective vs. automatic criteria, abnormally low offer rules
-9. **Documentation to submit** (24 items) — what goes in each envelope, required models, translation requirements
-10. **Contractual conditions** (26 items) — duration, extensions, subcontracting rules, data protection, governing law
-11. **Payment and cash flow** (20 items) — payment schedule, invoicing conditions, guarantee amounts and forms
-12. **Risks, penalties and alerts** (21 items) — penalty clauses, resolution causes, operational and legal risks
+Current blocks (counts are approximate and will change):
 
-For each item, the AI reads the tender documents and records what it finds — or records "not specified" if the information is absent.
+1. **General tender data** — identifiers, contracting body, contract type, CPV codes, lots, variants
+2. **Calendar and procedure** — deadlines, submission format, envelope structure, evaluation dates
+3. **Object and scope** — what's being contracted, deliverables, geographic scope, excluded services
+4. **Economic conditions** — base budget, VAT, unit prices, price revision, modification limits
+5. **Requirements to bid** — legal standing, solvency criteria, required certifications, insurance minimums
+6. **Team and resources required** — mandatory profiles, qualifications, experience, tools, non-subcontractable staff
+7. **Technical solution required** — methodology, work plan, logistics, audiovisual, sustainability, IP conditions
+8. **Award criteria** — scoring weights, subjective vs. automatic criteria, abnormally low offer rules
+9. **Documentation to submit** — what goes in each envelope, required models, translation requirements
+10. **Contractual conditions** — duration, extensions, subcontracting rules, data protection, governing law
+11. **Payment and cash flow** — payment schedule, invoicing conditions, guarantee amounts and forms
+12. **Risks, penalties and alerts** — penalty clauses, resolution causes, operational and legal risks
+
+For each item, the AI reads the tender documents and records what it finds — or records "not specified" if the information is absent. The output is the same structure for every tender, making it possible to compare tenders item by item.
+
+The template is **not configured per project**. It is global and applies to all tenders. Projects configure how they use the extracted values — they do not change what gets extracted.
 
 ### Per-project configuration
 
-Each project configures how it uses the extracted values for each item. Three modes:
+Operators (consultants) configure which template items are significant for each project, and what significance means. A project's configuration is a **selection** from the master template — most items will have no project-specific behavior and are simply displayed as extracted.
 
-- **Auto-fill**: The project can answer this from its own known data (e.g., team size, certifications held). Used to pre-populate bid responses.
-- **Go/no-go**: The extracted value is compared against a project threshold. If the condition isn't met (e.g., required insurance minimum is above what the company holds), the tender is flagged.
-- **Red flag**: If this item contains a specific value or clause, it's surfaced as a serious risk or disqualifier.
+For selected items, three modes:
 
-Most items will have no project-specific configuration — they're just extracted and displayed.
+- **Auto-fill**: The project can answer this from its own known data (e.g., team size, certifications held). The operator enters the project's value; it is used to pre-populate bid responses.
+- **Go/no-go**: The extracted value is compared against a project threshold. If the condition isn't met (e.g., required insurance minimum exceeds what the company holds), the tender is flagged at the inbox level.
+- **Red flag**: If this item contains a specific value or clause, it is surfaced as a serious risk or disqualifier regardless of the overall score.
+
+The configuration interface needs to be **powerful, not simple** — it is operated by consultants, not by end users. Consultants are expected to invest significant setup time to configure a project faithfully to the client's business profile. The UX should prioritize precision and completeness over ease for a first-time user.
 
 ### Trigger
 

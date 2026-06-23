@@ -95,13 +95,22 @@ Each entry covers: the decision, why it was made, the trade-offs, and whether th
 
 ---
 
-## 7. Document retrieval for tender analysis
+## 7. AI analysis: structured extraction, not summarization
 
-**Decision**: When a user triggers analysis on a tender, the pipeline fetches the PLACSP tender page, scrapes document links, downloads them, and sends them to Claude.
+**Decision**: The AI's job is to extract specific pieces of information from tender documents against a fixed 262-item template (`Template_Evaluacion_de_Pliegos.xlsx`), organized into 12 blocks covering general data, calendar, scope, economics, requirements, team, technical solution, award criteria, documentation, contractual conditions, payment, and risks/penalties.
 
-**Current limitation**: The prototype only retrieves the documents it expects for the two specific analysis types (technical and administrative). The intent going forward is to retrieve *all* documents attached to a tender, without assuming what analysis will be done with them.
+**Why**: Freeform summaries are hard to act on and hard to compare across tenders. A structured extraction produces a consistent record that can drive go/no-go decisions, flag risks, and pre-populate bid responses — all based on per-project configuration of each template item.
 
-**Keep in rewrite?** The document retrieval mechanism should be generalized — fetch all documents, store them or their content, and leave the analysis use case open. The specific two-analysis structure (technical / administrative) may be simplified or dropped.
+**Replaces**: The prototype's two-category structure (technical / administrative freeform summaries). That structure was too coarse and too implementation-specific.
+
+**Trade-offs**:
+- A 262-item extraction is a large prompt. Document analysis will be more expensive in tokens than a short summary. This needs to be factored into cost planning.
+- The template will evolve. The data model must version the template and handle items being added or removed without breaking existing project configurations.
+- Per-project item configuration (which items are auto-fill, go/no-go, or red flags) needs its own data model and operator UI.
+
+**Document retrieval**: Must fetch all documents attached to a tender (not just specific types). The AI receives whatever is available.
+
+**Keep in rewrite?** Yes — this is the redesigned approach. The prototype's analysis code does not carry forward; build from this spec.
 
 ---
 

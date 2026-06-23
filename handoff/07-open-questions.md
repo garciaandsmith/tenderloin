@@ -1,69 +1,102 @@
 # 07 — Open Questions
 
-Decisions that haven't been made yet and need to be resolved before or early in the rewrite.
+Decisions that haven't been made yet, and decisions recently resolved. Both recorded here so the rewrite team has the full picture.
 
 ---
 
-## 1. What does the AI analysis feature actually look like?
+## RESOLVED
 
-**Current state**: The prototype analyzes tender documents with Claude and produces structured output in two categories: "technical" (services required, technical conditions) and "administrative" (administrative conditions). The approach is being reconsidered.
+### R1. What does the AI analysis feature look like?
 
-**What's clear**: 
-- Document retrieval (getting all attached files from PLACSP) is needed and should be general-purpose.
-- Some AI-assisted summarization is desirable.
-- The two-category structure may not be the right one.
+**Decision**: The AI's job is structured information extraction against a fixed template, not freeform summarization.
 
-**What needs deciding**:
-- What questions should the AI answer about a tender document?
-- Is the output structured (specific fields) or freeform (a summary)?
-- Is the AI prompt per-project (customizable per client) or shared?
-- Does analysis run automatically (e.g., when a tender scores above a threshold) or only on user request?
+The template (`Template_Evaluacion_de_Pliegos.xlsx`) contains **262 items** across **12 blocks**:
 
-**Why it matters**: The `tender_analysis` table schema, the LLM prompt design, and the UI for displaying results all depend on this. Don't build a new data model for analysis until this is settled.
+| Block | Items |
+|---|---|
+| Datos generales de la licitación | 26 |
+| Calendario y procedimiento | 20 |
+| Objeto y alcance del contrato | 19 |
+| Condiciones económicas | 19 |
+| Requisitos para licitar | 22 |
+| Equipo y recursos exigidos | 16 |
+| Solución técnica requerida | 28 |
+| Criterios de adjudicación | 21 |
+| Documentación a presentar | 24 |
+| Condiciones contractuales | 26 |
+| Condiciones de pago y tesorería | 20 |
+| Riesgos, penalidades y alertas | 21 |
+
+For each item, the AI searches the tender documents and records what it finds (or "not specified"). The template is the same for all tenders; the per-project configuration is what each project *does* with the extracted values:
+
+- **Auto-fill items**: values the project can answer from their own data (team size, certifications, etc.) — used to populate a bid response
+- **Go/no-go items**: items whose extracted value is compared against a project threshold — if the condition isn't met, the tender is flagged
+- **Red flag items**: items that, if present, indicate a serious risk or disqualifier
+
+**Implications for the data model**:
+- `tender_analysis` needs to store extracted values per item, not freeform text categories
+- Project configuration needs a per-item settings layer (auto-fill value, go/no-go rule, red flag condition)
+- The extraction template itself should be versioned and stored (it will evolve)
+
+**Document retrieval**: Must be general-purpose — retrieve all documents attached to a tender (not just "technical" and "administrative"). The AI will analyze whatever is provided.
+
+**Trigger**: Analysis should be as automated as possible. The prototype required the user to manually trigger it per tender. The rewrite should trigger analysis automatically (e.g., when a tender crosses a score threshold, or when it enters the inbox).
+
+See `05-domain-logic.md` for the full domain description of this feature.
 
 ---
 
-## 2. What's the right pipeline trigger for user-initiated operations?
+### R2. How should filter changes communicate training label loss to users?
 
-**Current state**: Retraining, backfill, and analysis are triggered by dispatching GitHub Actions workflows from the web app. This is brittle (token expiry, silent failures, cold-start latency).
+**Decision**: After a filter change is saved, show the user a message indicating:
+- How many training labels were discarded
+- How many remain in the current training session
+- An encouragement to continue training to compensate for the loss
 
-**Options**:
-A. Keep GitHub Actions, add better error reporting and retry  
-B. Postgres-backed job queue with a small always-on worker  
-C. Managed task queue service (Inngest, Trigger.dev, etc.)
+This is a post-save notification, not a pre-save confirmation step. The filter change goes through; the user is then informed of its effect on training data.
 
-**Why it matters**: This affects reliability, developer experience, and operational cost. The right answer may differ for "retrain" (runs in seconds, can tolerate latency) vs. "document retrieval" (needs to complete within a user session) vs. "daily capture" (scheduled, no user waiting).
-
-**Suggested approach**: Decide this before building the training loop, since the training trigger is the highest-frequency user-triggered pipeline operation.
+**Implication**: The filter update endpoint must return label counts (before and after) alongside the updated filter configuration. The UI renders a contextual message, not an alert or blocking dialog.
 
 ---
 
-## 3. What is the minimum label count before showing model scores?
+### R3. What is the training Submit flow?
+
+**Decision**: The training interface has a **Submit button** that the user presses to indicate they've finished a scoring session. This triggers model retraining. Analysis pipeline updates should be as automated as possible (not manually triggered per item).
+
+**Implication**: Retraining is not triggered on every individual label — it's triggered on explicit Submit. This is better for performance (one retrain per session, not one per label) and gives users a clear sense of "committing" their work. The UI should show how many tenders have been scored in the current session and what the Submit action will do.
+
+---
+
+## OPEN
+
+### 1. What is the minimum label count before showing model scores?
 
 **Current state**: If no model has been trained, tenders receive a neutral score of 3.0. There's no minimum label threshold — in theory, a single training label could trigger a model.
 
 **What needs deciding**:
 - How many labeled tenders should be required before the model's scores replace the neutral fallback?
-- Should there be a confidence indicator in the UI showing how well-trained the model is (based on label count and cross-validation MAE)?
+- Should there be a model confidence indicator in the UI (based on label count and cross-validation MAE)?
 
-**Why it matters**: A model trained on 5 labels is essentially noise. Showing those scores as if they're meaningful could mislead users into over-trusting the ranking.
-
----
-
-## 4. How should filter changes communicate training label loss to users?
-
-**Current state**: When a user changes hard filters, training labels for tenders that no longer pass the new filters are silently invalidated. The user is not told how many labels they're losing.
-
-**What needs deciding**:
-- Should the UI show a preview of label loss before the user confirms a filter change? ("Changing this filter will remove 47 training labels.")
-- Should there be a confirmation step for filter changes that affect more than N labels?
-- Or is silent invalidation acceptable because users rarely think of filter changes and label loss together?
-
-**Why it matters**: This is a UX decision with real impact on user trust and training data quality. Answering it determines the API design for the filter update endpoint.
+**Why it matters**: A model trained on 5 labels is noise. Showing those scores as if they're meaningful could mislead users into over-trusting the ranking.
 
 ---
 
-## 5. How will historical data be imported for new projects?
+### 2. What's the right pipeline trigger for user-initiated operations?
+
+**Current state**: Retraining, backfill, and analysis are triggered by dispatching GitHub Actions workflows from the web app. This is brittle (token expiry, silent failures, cold-start latency).
+
+**Options**:
+- A. Keep GitHub Actions, add better error reporting and retry
+- B. Postgres-backed job queue with a small always-on worker
+- C. Managed task queue service (Inngest, Trigger.dev, etc.)
+
+**Context**: The Submit-triggered retrain (see R3) is a relatively infrequent, latency-tolerant operation. Automated analysis triggering (see R1) may be more time-sensitive if users expect results quickly after a tender enters the inbox.
+
+**Suggested approach**: Decide this before building the training loop.
+
+---
+
+### 3. How will historical data be imported for new projects?
 
 **Current state**: There are two historical import scripts in the prototype. They're functional but weren't designed as a first-class workflow. The intent is to redesign this.
 
@@ -77,36 +110,44 @@ C. Managed task queue service (Inngest, Trigger.dev, etc.)
 
 ---
 
-## 6. What are the TypeScript type issues hidden by `ignoreBuildErrors`?
+### 4. Per-project template configuration: how granular?
 
-**Current state**: `next.config.ts` has `ignoreBuildErrors: true` and `ignoreDuringBuilds: true` (for ESLint). This was added at some point during development and never removed. It masks an unknown number of type errors.
-
-**What needs deciding**: Before the rewrite, it would be worth running `tsc --noEmit` on the prototype to understand what's actually broken. This informs whether the type problems are surface-level (stale Supabase types) or architectural (wrong types used throughout).
-
-**Why it matters**: If the prototype has deep type errors, it's a signal that the data layer abstraction is messy and needs to be redesigned, not just cleaned up.
-
----
-
-## 7. What's the testing strategy?
-
-**Current state**: No tests exist. The `tests/` directory is empty.
+**Context**: The extraction template has 262 items. Each project needs to configure, per item: auto-fill value, go/no-go rule, or red flag condition. Most items will have no project-specific configuration (just "extract and show").
 
 **What needs deciding**:
-- What must be tested? (RLS policies, filter logic, ML pipeline, API routes?)
-- What can be left untested initially?
-- What framework? (pytest for Python, Vitest/Jest for TypeScript)
+- What's the data model for per-project item configuration? (A sparse config table keyed on project_id + item_id is likely the right approach.)
+- Is the go/no-go logic simple (threshold comparison) or rule-based (conditional expressions)?
+- Who configures this — the operator only, or can client users configure it too?
+- Does the template version matter? If the template gains or loses items, what happens to existing project configurations?
 
-**Recommended minimum**: 
-- Unit tests for the hard filter logic (easy to test, high business impact if wrong)
-- Tests for RLS policies (using Supabase's local development environment)
-- Integration tests for the capture pipeline (can use a recorded PLACSP response)
+**Why it matters**: This drives the schema for project configuration and the UI for the operator setup flow.
 
 ---
 
-## 8. Is the `training_session` migration RPC the right implementation?
+### 5. What are the TypeScript type issues hidden by `ignoreBuildErrors`?
 
-**Current state**: When filters change, a Postgres RPC (`migrate_training_scores`) runs to drop invalid labels. This is database logic that's invisible to application code.
+**What to do**: Before discarding the prototype, run `tsc --noEmit` to understand the scope of type errors. This takes 5 minutes and could save significant time in the rewrite if it reveals architectural issues rather than just stale types.
 
-**Open question**: Is there a case for doing this in application code instead? The trade-off is visibility (application code is easier to test and trace) vs. atomicity (doing it in a transaction in the database is safer).
+**Why it matters**: Deep type errors suggest wrong abstractions. Surface type errors (stale Supabase types) are a known and easily fixable issue.
 
-**This is low urgency** — the current approach works. But the rewrite should consciously decide rather than copy it by default.
+---
+
+### 6. What's the testing strategy?
+
+**Current state**: No tests exist.
+
+**Recommended minimum for the rewrite**:
+- Unit tests for hard filter logic (high business impact if wrong, easy to test)
+- Tests for RLS policies (use Supabase's local dev environment)
+- Integration tests for the capture pipeline (recordable against PLACSP responses)
+- Tests for the extraction template parsing (the AI output will need to be validated against expected item structure)
+
+---
+
+### 7. Is the `training_session` migration RPC the right implementation?
+
+**Current state**: When filters change, a Postgres RPC drops invalid training labels atomically. It works, but the logic is invisible to application code and not tested.
+
+**Open question**: Move this logic to application code (more testable, more traceable) or keep it in the database (atomic, no round-trips)?
+
+**Low urgency** — the current approach is correct. Decide consciously rather than copying it by default.

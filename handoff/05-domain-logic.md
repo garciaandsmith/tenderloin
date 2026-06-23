@@ -130,23 +130,68 @@ Dismissed tenders should not reappear unless the user explicitly un-dismisses. T
 
 ## Document retrieval
 
-When a user finds a tender interesting, they need access to all documents PLACSP has for that tender. This includes:
+When a user finds a tender interesting, the system retrieves all documents PLACSP has for that tender. This includes:
 - Technical specifications (pliego técnico)
 - Administrative specifications (pliego administrativo)
-- Annexes, templates, questionnaires, etc.
+- Annexes, templates, questionnaires, price tables, etc.
 
-The system should retrieve all available documents, not just the ones expected for a specific analysis type. The user decides what to do with them.
+Retrieval must be general-purpose — fetch everything, not just the documents expected for a specific analysis type. The content is then passed to the AI for extraction.
 
 ---
 
-## AI analysis of tender documents
+## AI analysis: structured extraction against a template
 
-This is an optional step beyond document retrieval. The current approach uses Claude to analyze the downloaded documents and produce structured summaries (technical requirements, administrative conditions, etc.).
+The AI's job is not to summarize tender documents freely. It is to search those documents for **specific pieces of information** defined by a shared extraction template.
 
-This feature is in flux. The specific two-analysis structure (technical / administrative) may not survive into the rewrite. What matters is:
-1. Documents can be downloaded and associated with a tender.
-2. Some AI-assisted summarization of those documents is desirable.
-3. The exact format and triggers for that summarization are to be redesigned.
+### The extraction template
+
+The template contains **262 items** organized into **12 blocks**:
+
+1. **General tender data** (26 items) — identifiers, contracting body, contract type, CPV codes, lots, variants
+2. **Calendar and procedure** (20 items) — deadlines, submission format, envelope structure, evaluation dates
+3. **Object and scope** (19 items) — what's being contracted, deliverables, geographic scope, excluded services
+4. **Economic conditions** (19 items) — base budget, VAT, unit prices, price revision, modification limits
+5. **Requirements to bid** (22 items) — legal standing, solvency criteria, required certifications, insurance minimums
+6. **Team and resources required** (16 items) — mandatory profiles, qualifications, experience, tools, non-subcontractable staff
+7. **Technical solution required** (28 items) — methodology, work plan, logistics, audiovisual, sustainability, IP conditions
+8. **Award criteria** (21 items) — scoring weights, subjective vs. automatic criteria, abnormally low offer rules
+9. **Documentation to submit** (24 items) — what goes in each envelope, required models, translation requirements
+10. **Contractual conditions** (26 items) — duration, extensions, subcontracting rules, data protection, governing law
+11. **Payment and cash flow** (20 items) — payment schedule, invoicing conditions, guarantee amounts and forms
+12. **Risks, penalties and alerts** (21 items) — penalty clauses, resolution causes, operational and legal risks
+
+For each item, the AI reads the tender documents and records what it finds — or records "not specified" if the information is absent.
+
+### Per-project configuration
+
+Each project configures how it uses the extracted values for each item. Three modes:
+
+- **Auto-fill**: The project can answer this from its own known data (e.g., team size, certifications held). Used to pre-populate bid responses.
+- **Go/no-go**: The extracted value is compared against a project threshold. If the condition isn't met (e.g., required insurance minimum is above what the company holds), the tender is flagged.
+- **Red flag**: If this item contains a specific value or clause, it's surfaced as a serious risk or disqualifier.
+
+Most items will have no project-specific configuration — they're just extracted and displayed.
+
+### Trigger
+
+Analysis should run automatically when a tender becomes interesting, without requiring the user to manually trigger it per tender. The exact threshold (score above X, user marks as saved, etc.) is to be defined, but the principle is: minimize manual steps between "this tender is promising" and "here's the extracted data."
+
+### Output
+
+For each tender + project, the output is a structured record: one extracted value per template item, plus any project-level flags (go/no-go status, red flags triggered). The user sees this as a completed evaluation sheet, not a narrative summary.
+
+---
+
+## Training: the Submit flow
+
+The training interface lets users score historical tenders 0–5. Scores accumulate during a session. When the user is done, they press **Submit** to commit the session and trigger model retraining.
+
+Retraining is not triggered on every individual label. It runs once per submitted session. This keeps retraining infrequent (good for performance) and gives users a clear moment of "committing" their scoring work.
+
+After Submit:
+1. The new model is trained on all valid labels for the current training session.
+2. All passing tenders in the inbox are re-scored with the new model.
+3. The user sees updated rankings in the inbox.
 
 ---
 

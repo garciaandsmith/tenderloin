@@ -1,6 +1,16 @@
 -- =============================================================
 -- TENDERLOIN — Supabase PostgreSQL Schema
 -- Run this in the Supabase SQL Editor to bootstrap the database.
+--
+-- This file is a CONSOLIDATED snapshot: the original baseline with every file in
+-- supabase/migrations/ (001 … 20260424) already folded in. A fresh project only
+-- needs this file; do NOT also run the migrations on top of it.
+-- Going forward, new changes should still be added as migrations AND folded in here.
+--
+-- Not covered by SQL (configure manually in the Supabase dashboard / see readme):
+--   * Storage bucket "models" (private) — auto-created by pipeline/scoring/model_io.py
+--   * Auth settings: site URL / redirect URLs (incl. /api/auth/callback), email
+--     templates, SMTP, signup & invite settings
 -- =============================================================
 
 -- ─────────────────────────────────────────────────────────────
@@ -47,7 +57,9 @@ create table public.projects (
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now(),
   is_active         boolean not null default true,
-  training_session  integer not null default 1
+  training_session  integer not null default 1,
+  prompt_technical      text,   -- system prompt for technical analysis (NULL = not configured)
+  prompt_administrative text    -- system prompt for administrative analysis (NULL = not configured)
 );
 
 -- ─────────────────────────────────────────────────────────────
@@ -78,7 +90,8 @@ create table public.project_filters (
   max_lot_count        integer,    -- ignore tenders with more lots than this
   min_contract_months  integer,
   max_contract_months  integer,
-  updated_at           timestamptz not null default now()
+  updated_at           timestamptz not null default now(),
+  filter_version       integer not null default 1
 );
 
 -- ─────────────────────────────────────────────────────────────
@@ -155,6 +168,9 @@ create table public.tender_model_scores (
   unique (tender_id, project_id, model_version)
 );
 
+create index tender_model_scores_project_tender_idx
+  on public.tender_model_scores (project_id, tender_id);
+
 -- ─────────────────────────────────────────────────────────────
 -- TENDER_FILTER_RESULTS (which tenders pass each project's hard filters)
 -- ─────────────────────────────────────────────────────────────
@@ -165,8 +181,16 @@ create table public.tender_filter_results (
   passed          boolean not null,
   discard_reasons text[],  -- e.g. {'budget_below_min','region_mismatch'}
   evaluated_at    timestamptz not null default now(),
+  filter_version  integer not null default 1,   -- project_filters.filter_version used for this result
+  inbox_seen_at   timestamptz,                  -- first time opened from the inbox (NULL = never)
+  dismissed_at    timestamptz,                  -- user removed it from the inbox (NULL = not dismissed)
   unique (tender_id, project_id)
 );
+
+create index tender_filter_results_project_passed_idx
+  on public.tender_filter_results (project_id, passed, tender_id desc);
+create index tender_filter_results_dismissed_at_idx
+  on public.tender_filter_results (project_id, dismissed_at) where dismissed_at is null;
 
 -- ─────────────────────────────────────────────────────────────
 -- TENDER_ANALYSIS (Phase 2: deep analysis output)
@@ -179,9 +203,7 @@ create table public.tender_analysis (
   triggered_by              uuid references public.profiles(id),
   status                    text not null default 'pending'
                               check (status in ('pending','running','done','error')),
-  key_data_summary          text,
   services_required         text,
-  technical_conditions      text,
   administrative_conditions text,
   attached_files            jsonb,  -- [{name, url, type}]
   raw_llm_output            jsonb,
@@ -189,6 +211,9 @@ create table public.tender_analysis (
   completed_at              timestamptz,
   unique (tender_id, analysis_type, project_id)
 );
+
+create index tender_analysis_project_tender_idx
+  on public.tender_analysis (project_id, tender_id);
 
 -- =============================================================
 -- ROW LEVEL SECURITY
@@ -221,6 +246,53 @@ returns boolean language sql security definer as $$
     select 1 from public.project_members
     where project_id = p_project_id and user_id = auth.uid()
   );
+$$;
+
+-- Atomically bump a project's training_session and return the new value.
+create or replace function public.increment_training_session(p_project_id uuid)
+returns integer language plpgsql security definer as $$
+declare
+  new_session integer;
+begin
+  update public.projects
+  set training_session = training_session + 1
+  where id = p_project_id
+  returning training_session into new_session;
+  return new_session;
+end;
+$$;
+
+-- Carry training scores over to a new session, but only for tenders that still
+-- pass the project's filters and don't already have a score in the new session.
+create or replace function public.migrate_training_scores(
+  p_project_id   uuid,
+  p_from_session integer,
+  p_to_session   integer
+)
+returns integer language plpgsql security definer as $$
+declare
+  updated_count integer;
+begin
+  update public.tender_scores ts
+  set    training_session = p_to_session
+  where  ts.training_session = p_from_session
+    and  ts.project_id = p_project_id
+    and  ts.tender_id in (
+           select tender_id
+           from   public.tender_filter_results
+           where  project_id = p_project_id
+             and  passed = true
+         )
+    and not exists (
+           select 1 from public.tender_scores ts2
+           where  ts2.tender_id        = ts.tender_id
+             and  ts2.project_id       = ts.project_id
+             and  ts2.scored_by        = ts.scored_by
+             and  ts2.training_session = p_to_session
+         );
+  get diagnostics updated_count = row_count;
+  return updated_count;
+end;
 $$;
 
 -- ── PROFILES ─────────────────────────────────────────────────
@@ -264,6 +336,11 @@ create policy "filters_all_admin" on public.project_filters
 create policy "filters_select_member" on public.project_filters
   for select using (is_project_member(project_id));
 
+create policy "filters_write_member" on public.project_filters
+  for all
+  using      (is_project_member(project_id))
+  with check (is_project_member(project_id));
+
 -- ── TENDERS_RAW ──────────────────────────────────────────────
 -- Any authenticated user can read; only service_role can write (Python script bypasses RLS)
 create policy "tenders_select_authenticated" on public.tenders_raw
@@ -296,6 +373,12 @@ create policy "model_scores_select" on public.tender_model_scores
 -- ── TENDER_FILTER_RESULTS ────────────────────────────────────
 create policy "filter_results_select" on public.tender_filter_results
   for select using (is_project_member(project_id) or is_admin());
+
+-- Used for inbox_seen_at / dismissed_at updates
+create policy "filter_results_update_seen" on public.tender_filter_results
+  for update
+  using      (is_project_member(project_id) or is_admin())
+  with check (is_project_member(project_id) or is_admin());
 
 -- ── TENDER_ANALYSIS ──────────────────────────────────────────
 create policy "analysis_select" on public.tender_analysis
